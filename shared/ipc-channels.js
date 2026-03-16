@@ -1,0 +1,15 @@
+module.exports = {
+  GET_DASHBOARD_DATA:     'get-dashboard-data',
+  TRIGGER_RSS_REFRESH:    'trigger-rss-refresh',
+  GET_SEO_RESULTS:        'get-seo-results',
+  TRIGGER_SEO_ANALYZE:    'trigger-seo-analyze',
+  SNAP_WINDOW:            'snap-window',
+  SET_OPACITY:            'set-opacity',
+  TRIGGER_WEEKLY_CHECK:   'trigger-weekly-check',
+  WEEKLY_CHECK_DONE:      'weekly-check-done',
+  VALIDATE_LICENSE:       'validate-license',
+  GET_UI_SETTINGS:        'get-ui-settings',
+  SET_UI_SETTINGS:        'set-ui-settings',
+  OPEN_SEO_WINDOW:        'open-seo-window',
+  CLOSE_SEO_WINDOW:       'close-seo-window',
+};

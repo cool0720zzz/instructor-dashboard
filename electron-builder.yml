@@ -1,0 +1,28 @@
+appId: com.instructor.dashboard
+productName: 강사 활동 대시보드
+directories:
+  output: dist/electron
+files:
+  - dist/renderer/**/*
+  - src/main/**/*
+  - shared/**/*
+  - node_modules/**/*
+  - package.json
+forceCodeSigning: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.ico
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  installerHeaderIcon: assets/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 강사 활동 대시보드
+  runAfterFinish: true
