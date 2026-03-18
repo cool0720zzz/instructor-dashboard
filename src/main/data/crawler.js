@@ -121,7 +121,14 @@ async function crawlNaverPlaceReviews(placeUrl) {
  */
 async function _fetchReviewsForTab(placeId, tab) {
   try {
-    const reviews = await _fetchReviewsViaApi(placeId, tab) || await _fetchReviewsViaHtml(placeId, tab);
+    // Use mobile page directly — it has Apollo state with accurate created dates.
+    // The PC API (_fetchReviewsViaApi) often returns reviews without dates,
+    // causing all reviews to fallback to today's date.
+    const reviews = await _fetchReviewsViaHtml(placeId, tab);
+    console.log(`[Crawler] _fetchReviewsViaHtml(${tab}): ${reviews ? reviews.length + ' reviews' : 'empty'}`);
+    if (reviews && reviews.length > 0) {
+      console.log(`[Crawler] dates sample:`, reviews.slice(0, 3).map(r => r.date));
+    }
     return reviews || [];
   } catch (err) {
     console.warn(`[Crawler] Failed to fetch ${tab} reviews: ${err.message}`);
