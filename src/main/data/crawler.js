@@ -304,26 +304,88 @@ function _parseReviewsFromHtml($) {
 
 /**
  * Fetch reviews via mobile HTML page (fallback).
+ * Parses Apollo state JSON embedded in script tags for VisitorReview objects.
  * @param {string} tab - 'visitor' or 'receipt'
  */
 async function _fetchReviewsViaHtml(placeId, tab = 'visitor') {
   const reviews = [];
 
   try {
-    // Mobile page is simpler and more likely to work without JS
+    // Mobile page contains Apollo state JSON with full review data
     const url = `https://m.place.naver.com/restaurant/${placeId}/review/${tab}?reviewSort=recent`;
     const html = await fetchHtml(url, { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' });
 
     const $ = cheerio.load(html);
 
-    // Try script-embedded JSON first
+    // Extract VisitorReview objects from Apollo state in script tags
+    // Naver embeds Apollo cache as JSON in scripts with structure:
+    //   "VisitorReview:<id>:true": { "body":"...", "created":"M.D.요일", ... }
     $('script').each((_, script) => {
+      if (reviews.length > 0) return; // already found
       const content = $(script).html() || '';
-      if (content.includes('"body"') && content.includes('"visitDate"')) {
+      if (!content.includes('"body"') || content.length < 5000) return;
+
+      try {
+        // Strategy: find "VisitorReview:<id>:true" keys, then extract body+created
+        // from each object block (delimited by the next top-level key)
+        const seen = new Set();
+        const vrKeyRegex = /"VisitorReview:([a-f0-9]+):true":\{/g;
+        let keyMatch;
+
+        while ((keyMatch = vrKeyRegex.exec(content)) !== null) {
+          const startIdx = keyMatch.index + keyMatch[0].length;
+          // Find a reasonable chunk (review objects are typically 500-1500 chars)
+          const chunk = content.substring(startIdx, startIdx + 2000);
+
+          // Must be a VisitorReview object (not a reference)
+          if (!chunk.includes('"__typename":"VisitorReview"')) continue;
+
+          // Extract body
+          const bodyMatch = chunk.match(/"body":"((?:[^"\\]|\\.)*)"/);
+          if (!bodyMatch) continue;
+          const text = bodyMatch[1]
+            .replace(/\\n/g, '\n')
+            .replace(/\\"/g, '"')
+            .replace(/\\u002F/g, '/');
+          if (text.length < 5) continue;
+
+          // Deduplicate by first 50 chars of body text
+          const dedupeKey = text.substring(0, 50);
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
+
+          // Extract date from "created" field (format: "M.D.요일" e.g. "3.9.월")
+          let dateStr = '';
+          const createdMatch = chunk.match(/"created":"([^"]+)"/);
+          if (createdMatch) {
+            dateStr = _parseNaverShortDate(createdMatch[1]);
+          }
+          // Fallback: try "visited" field
+          if (!dateStr) {
+            const visitedMatch = chunk.match(/"visited":"([^"]+)"/);
+            if (visitedMatch) {
+              dateStr = _parseNaverShortDate(visitedMatch[1]);
+            }
+          }
+          // Last resort: try thumbnail filename for date (e.g. 20260309_185858.jpg)
+          if (!dateStr) {
+            const filenameDateMatch = chunk.match(/(\d{4})(\d{2})(\d{2})_\d{6}\.\w+/);
+            if (filenameDateMatch) {
+              dateStr = `${filenameDateMatch[1]}-${filenameDateMatch[2]}-${filenameDateMatch[3]}`;
+            }
+          }
+          if (!dateStr) dateStr = new Date().toISOString().slice(0, 10);
+
+          reviews.push({ text, date: dateStr });
+        }
+      } catch { /* parse error */ }
+
+      // Fallback: simple body-only extraction if Apollo parsing got nothing
+      if (reviews.length === 0) {
         try {
-          // Find JSON objects with review-like structure
-          const matches = content.matchAll(/"body"\s*:\s*"([^"]+?)"/g);
-          for (const m of matches) {
+          const bodyRegex = /"body"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+          let m;
+          while ((m = bodyRegex.exec(content)) !== null) {
             const text = m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
             if (text.length < 5) continue;
             reviews.push({ text, date: new Date().toISOString().slice(0, 10) });
@@ -342,6 +404,44 @@ async function _fetchReviewsViaHtml(placeId, tab = 'visitor') {
   }
 
   return reviews;
+}
+
+/**
+ * Parse Naver's short date format: "M.D.요일" (e.g. "3.9.월", "12.25.수")
+ * Year is inferred: if the date is in the future, use last year.
+ * Also handles "N월 N일" format.
+ * @returns {string} YYYY-MM-DD or empty string
+ */
+function _parseNaverShortDate(str) {
+  if (!str) return '';
+  const trimmed = str.trim();
+
+  // Format with year: "YY.M.D.요일" (e.g. "25.2.24.월" = 2025-02-24)
+  const longMatch = trimmed.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})\.[월화수목금토일]/);
+  if (longMatch) {
+    const year = 2000 + parseInt(longMatch[1], 10);
+    const month = parseInt(longMatch[2], 10);
+    const day = parseInt(longMatch[3], 10);
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  // Format without year: "M.D.요일" (e.g. "3.9.월")
+  const shortMatch = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.[월화수목금토일]/);
+  if (shortMatch) {
+    const month = parseInt(shortMatch[1], 10);
+    const day = parseInt(shortMatch[2], 10);
+    const now = new Date();
+    let year = now.getFullYear();
+
+    // If the date would be in the future, it's from last year
+    const candidate = new Date(year, month - 1, day);
+    if (candidate > now) year--;
+
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  // Try existing _normalizeDate for other formats (relative dates, etc.)
+  return _normalizeDate(trimmed);
 }
 
 /**
