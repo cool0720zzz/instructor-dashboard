@@ -10,6 +10,7 @@ if (typeof globalThis.File === 'undefined') {
 
 const { app, ipcMain, BrowserWindow } = require('electron');
 const path = require('path');
+const { autoUpdater } = require('electron-updater');
 const {
   createMainWindow, getMainWindow,
   registerWindowIpc,
@@ -19,6 +20,24 @@ const { validateAndLoad, revalidateIfNeeded } = require('./license');
 const channels = require('../../shared/ipc-channels');
 
 const isDev = !app.isPackaged;
+
+// ─── Auto-updater ───
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('update-available', () => {
+  const win = getMainWindow();
+  if (win && !win.isDestroyed()) win.webContents.send('update-available');
+});
+
+autoUpdater.on('update-downloaded', () => {
+  const win = getMainWindow();
+  if (win && !win.isDestroyed()) win.webContents.send('update-downloaded');
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
+});
 
 function registerDataIpcHandlers() {
   // ─── License ───
@@ -44,12 +63,10 @@ function registerDataIpcHandlers() {
   ipcMain.handle(channels.GET_DASHBOARD_DATA, async () => {
     try {
       const db = require('./data/db');
+      const { getWeekRangeISO, getMonthRangeISO } = require('./data/dateRanges');
       const instructors = db.getAllInstructors();
-      const now = new Date();
-      const weekStart = getWeekStart(now);
-      const weekEnd = getWeekEnd(now);
-      const monthStart = getMonthStart(now);
-      const monthEnd = getMonthEnd(now);
+      const { start: weekStart, end: weekEnd } = getWeekRangeISO();
+      const { start: monthStart, end: monthEnd } = getMonthRangeISO();
       const lastCollection = db.getSetting('last_collection');
 
       return instructors.map((inst) => {
@@ -183,36 +200,6 @@ function registerDataIpcHandlers() {
 
 // ─── Date helpers ───
 
-function getWeekStart(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
-function getWeekEnd(date) {
-  const d = new Date(getWeekStart(date));
-  d.setDate(d.getDate() + 6);
-  d.setHours(23, 59, 59, 999);
-  return d.toISOString();
-}
-
-function getMonthStart(date) {
-  const d = new Date(date);
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
-function getMonthEnd(date) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + 1, 0);
-  d.setHours(23, 59, 59, 999);
-  return d.toISOString();
-}
-
 // ─── App lifecycle ───
 
 app.whenReady().then(async () => {
@@ -270,6 +257,8 @@ app.whenReady().then(async () => {
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
     win.loadFile(path.join(__dirname, '../../dist/renderer/index.html'));
+    // Check for updates 5 seconds after launch (production only)
+    setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 5000);
   }
 });
 

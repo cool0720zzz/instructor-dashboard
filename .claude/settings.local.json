@@ -48,7 +48,9 @@
       "Bash(ls:*)",
       "Bash(where:*)",
       "Bash(winget install:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(npx vercel:*)",
+      "Bash(find /c/dev/instructor-dashboard -maxdepth 2 -type f \\\\\\(-name .github -o -name *.yml -o -name *.yaml -o -name Dockerfile -o -name .dockerignore -o -name vercel.json -o -name netlify.toml \\\\\\))"
     ]
   }
 }

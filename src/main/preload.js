@@ -63,4 +63,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channels.WEEKLY_CHECK_DONE, handler);
     return () => ipcRenderer.removeListener(channels.WEEKLY_CHECK_DONE, handler);
   },
+
+  // Auto-update
+  onUpdateAvailable: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('update-available', handler);
+    return () => ipcRenderer.removeListener('update-available', handler);
+  },
+  onUpdateDownloaded: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('update-downloaded', handler);
+    return () => ipcRenderer.removeListener('update-downloaded', handler);
+  },
+  installUpdate: () => ipcRenderer.invoke('install-update'),
 });

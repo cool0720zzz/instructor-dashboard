@@ -37,8 +37,8 @@ function extractPlaceId(placeUrl) {
 }
 
 /**
- * Crawl Naver Place visitor reviews using the Naver Place API.
- * Naver Place has a JSON API that returns reviews without needing JS rendering.
+ * Crawl Naver Place reviews (both visitor and receipt tabs).
+ * Fetches from both /review/visitor and /review/receipt, deduplicates, then matches instructors.
  */
 async function crawlNaverPlaceReviews(placeUrl) {
   const result = { reviews: [], error: null };
@@ -60,16 +60,31 @@ async function crawlNaverPlaceReviews(placeUrl) {
     return result;
   }
 
-  console.log(`[Crawler] Fetching reviews for place ${placeId}`);
+  console.log(`[Crawler] Fetching reviews for place ${placeId} (visitor + receipt)`);
 
   try {
-    // Naver Place uses a JSON API for reviews
-    // Try the API endpoint first, fall back to HTML scraping
-    const reviews = await _fetchReviewsViaApi(placeId) || await _fetchReviewsViaHtml(placeId);
+    // Fetch both visitor and receipt reviews in parallel
+    const [visitorReviews, receiptReviews] = await Promise.all([
+      _fetchReviewsForTab(placeId, 'visitor'),
+      _fetchReviewsForTab(placeId, 'receipt'),
+    ]);
 
-    console.log(`[Crawler] ${reviews.length} reviews fetched, matching against ${instructors.length} instructors`);
+    console.log(`[Crawler] visitor: ${visitorReviews.length}, receipt: ${receiptReviews.length}`);
 
-    for (const raw of reviews) {
+    // Combine and deduplicate by review text
+    const seen = new Set();
+    const allReviews = [];
+    for (const r of [...visitorReviews, ...receiptReviews]) {
+      const key = r.text.trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        allReviews.push(r);
+      }
+    }
+
+    console.log(`[Crawler] ${allReviews.length} unique reviews, matching against ${instructors.length} instructors`);
+
+    for (const raw of allReviews) {
       const match = matchInstructor(raw.text, instructors);
 
       result.reviews.push({
@@ -101,16 +116,31 @@ async function crawlNaverPlaceReviews(placeUrl) {
 }
 
 /**
- * Fetch reviews via Naver Place API (JSON endpoint).
+ * Fetch reviews for a specific tab (visitor or receipt).
+ * Returns an array of { text, date } objects, never throws.
  */
-async function _fetchReviewsViaApi(placeId) {
+async function _fetchReviewsForTab(placeId, tab) {
+  try {
+    const reviews = await _fetchReviewsViaApi(placeId, tab) || await _fetchReviewsViaHtml(placeId, tab);
+    return reviews || [];
+  } catch (err) {
+    console.warn(`[Crawler] Failed to fetch ${tab} reviews: ${err.message}`);
+    return [];
+  }
+}
+
+/**
+ * Fetch reviews via Naver Place API (JSON endpoint).
+ * @param {string} tab - 'visitor' or 'receipt'
+ */
+async function _fetchReviewsViaApi(placeId, tab = 'visitor') {
   const reviews = [];
   const PAGE_SIZE = 50;
   const MAX_PAGES = 4;
 
   for (let page = 1; page <= MAX_PAGES; page++) {
     try {
-      const url = `https://pcmap.place.naver.com/place/${placeId}/review/visitor?reviewSort=recent&page=${page}`;
+      const url = `https://pcmap.place.naver.com/place/${placeId}/review/${tab}?reviewSort=recent&page=${page}`;
       const html = await fetchHtml(url, { Referer: 'https://map.naver.com' });
 
       // Naver embeds review data as JSON in a script tag
@@ -274,13 +304,14 @@ function _parseReviewsFromHtml($) {
 
 /**
  * Fetch reviews via mobile HTML page (fallback).
+ * @param {string} tab - 'visitor' or 'receipt'
  */
-async function _fetchReviewsViaHtml(placeId) {
+async function _fetchReviewsViaHtml(placeId, tab = 'visitor') {
   const reviews = [];
 
   try {
     // Mobile page is simpler and more likely to work without JS
-    const url = `https://m.place.naver.com/restaurant/${placeId}/review/visitor?reviewSort=recent`;
+    const url = `https://m.place.naver.com/restaurant/${placeId}/review/${tab}?reviewSort=recent`;
     const html = await fetchHtml(url, { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' });
 
     const $ = cheerio.load(html);
@@ -315,37 +346,82 @@ async function _fetchReviewsViaHtml(placeId) {
 
 /**
  * Normalize a date string to YYYY-MM-DD format.
+ * Handles absolute dates, Korean dates, dot format, and relative dates.
+ *
+ * Relative date conversions:
+ *   "오늘"        → today's date
+ *   "어제"        → yesterday
+ *   "N일 전"      → today minus N days
+ *   "N시간 전"    → today (same day)
+ *   "N분 전"      → today (same day)
+ *   "1주일 전"    → today minus 7 days
+ *   "N주일 전"    → today minus N*7 days
+ *   "1개월 전"    → first day of last month
+ *   "N개월 전"    → first day of N months ago
+ *   "YYYY.MM.DD"  → parse directly
  */
 function _normalizeDate(dateStr) {
   if (!dateStr) return '';
 
+  const trimmed = dateStr.trim();
+
   // ISO format
-  if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
-    return dateStr.slice(0, 10);
+  if (trimmed.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return trimmed.slice(0, 10);
+  }
+
+  // "오늘" → today
+  if (trimmed === '오늘') {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  // "어제" → yesterday
+  if (trimmed === '어제') {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
   }
 
   // Korean format: 2024년 3월 15일
-  const korMatch = dateStr.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+  const korMatch = trimmed.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
   if (korMatch) {
     return `${korMatch[1]}-${korMatch[2].padStart(2, '0')}-${korMatch[3].padStart(2, '0')}`;
   }
 
-  // Dot format: 24.03.15
-  const dotMatch = dateStr.match(/(\d{2,4})\.(\d{1,2})\.(\d{1,2})/);
+  // Dot format: 2024.03.15 or 24.03.15
+  const dotMatch = trimmed.match(/(\d{2,4})\.(\d{1,2})\.(\d{1,2})/);
   if (dotMatch) {
     let year = parseInt(dotMatch[1], 10);
     if (year < 100) year += 2000;
     return `${year}-${dotMatch[2].padStart(2, '0')}-${dotMatch[3].padStart(2, '0')}`;
   }
 
-  // Relative: N일 전
-  const relMatch = dateStr.match(/(\d+)(일|시간|분)\s*전/);
+  // Relative: N개월 전 → first day of N months ago
+  const monthMatch = trimmed.match(/(\d+)\s*개월\s*전/);
+  if (monthMatch) {
+    const n = parseInt(monthMatch[1], 10);
+    const d = new Date();
+    d.setMonth(d.getMonth() - n, 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // Relative: N주일 전 → today minus N*7 days
+  const weekMatch = trimmed.match(/(\d+)\s*주일?\s*전/);
+  if (weekMatch) {
+    const n = parseInt(weekMatch[1], 10);
+    const d = new Date();
+    d.setDate(d.getDate() - n * 7);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // Relative: N일/시간/분 전
+  const relMatch = trimmed.match(/(\d+)\s*(일|시간|분)\s*전/);
   if (relMatch) {
     const num = parseInt(relMatch[1], 10);
     const unit = relMatch[2];
     const now = new Date();
     if (unit === '일') now.setDate(now.getDate() - num);
-    else if (unit === '시간') now.setHours(now.getHours() - num);
+    // 시간/분 → same day
     return now.toISOString().slice(0, 10);
   }
 

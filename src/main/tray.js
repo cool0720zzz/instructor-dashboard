@@ -5,29 +5,9 @@ const { getMainWindow } = require('./window');
 let tray = null;
 
 function createTray() {
-  // Create a simple 16x16 tray icon programmatically
-  const iconSize = 16;
-  const icon = nativeImage.createEmpty();
-
-  // Use a built-in or bundled icon; fallback to a generated one
-  const iconPath = path.join(__dirname, '../../assets/tray-icon.png');
-  try {
-    tray = new Tray(iconPath);
-  } catch {
-    // If no icon file exists, create a simple colored icon
-    const canvas = Buffer.alloc(iconSize * iconSize * 4);
-    for (let i = 0; i < iconSize * iconSize; i++) {
-      canvas[i * 4] = 0x22;     // R
-      canvas[i * 4 + 1] = 0xc5; // G
-      canvas[i * 4 + 2] = 0x5e; // B
-      canvas[i * 4 + 3] = 0xff; // A
-    }
-    const fallbackIcon = nativeImage.createFromBuffer(canvas, {
-      width: iconSize,
-      height: iconSize,
-    });
-    tray = new Tray(fallbackIcon);
-  }
+  const iconPath = path.join(__dirname, '../../assets/icon.png');
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -82,7 +62,7 @@ function createTray() {
     },
   ]);
 
-  tray.setToolTip('강사 활동 대시보드');
+  tray.setToolTip('LINO매니저');
   tray.setContextMenu(contextMenu);
 
   tray.on('click', () => {

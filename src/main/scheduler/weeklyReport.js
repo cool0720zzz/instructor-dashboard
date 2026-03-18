@@ -1,27 +1,15 @@
 const db = require('../data/db');
 const { determineStatus } = require('./alertEngine');
+const { getWeekRangeISO } = require('../data/dateRanges');
 
 /**
  * Return the Monday-Sunday date range for the current week.
- * Monday is considered the start of the week.
+ * Monday 00:00:00 ~ Sunday 23:59:59.999 as ISO strings.
  *
- * @returns {{ start: string, end: string }} ISO date strings (YYYY-MM-DD)
+ * @returns {{ start: string, end: string }} ISO date strings
  */
 function getWeekRange() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun, 1=Mon, ...
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diffToMonday);
-  monday.setHours(0, 0, 0, 0);
-
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-
-  const fmt = (d) => d.toISOString().slice(0, 10);
-  return { start: fmt(monday), end: fmt(sunday) };
+  return getWeekRangeISO();
 }
 
 /**

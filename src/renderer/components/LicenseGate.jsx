@@ -40,7 +40,7 @@ export default function LicenseGate({ onValid }) {
     <div className="flex items-center justify-center h-screen bg-gray-900/95 rounded-lg">
       <div className="w-full max-w-sm mx-auto px-6">
         <div className="text-center mb-8">
-          <h1 className="text-xl font-bold text-white mb-2">강사 활동 대시보드</h1>
+          <h1 className="text-xl font-bold text-white mb-2">LINO매니저</h1>
           <p className="text-gray-400 text-sm">라이선스 키를 입력하여 활성화하세요</p>
         </div>
 

@@ -234,13 +234,13 @@ function addBlogPost(data) {
 }
 
 function getBlogCount(instructorId, weekStart, weekEnd) {
-  const row = _get('SELECT COUNT(*) AS cnt FROM blog_posts WHERE instructor_id = ? AND published_at >= ? AND published_at < ?',
+  const row = _get('SELECT COUNT(*) AS cnt FROM blog_posts WHERE instructor_id = ? AND published_at >= ? AND published_at <= ?',
     [instructorId, weekStart, weekEnd]);
   return row ? row.cnt : 0;
 }
 
 function getBlogCountMonth(instructorId, monthStart, monthEnd) {
-  const row = _get('SELECT COUNT(*) AS cnt FROM blog_posts WHERE instructor_id = ? AND published_at >= ? AND published_at < ?',
+  const row = _get('SELECT COUNT(*) AS cnt FROM blog_posts WHERE instructor_id = ? AND published_at >= ? AND published_at <= ?',
     [instructorId, monthStart, monthEnd]);
   return row ? row.cnt : 0;
 }
@@ -248,7 +248,7 @@ function getBlogCountMonth(instructorId, monthStart, monthEnd) {
 function getUnanalyzedPosts(instructorId, weekStart, weekEnd) {
   return _all(`SELECT bp.* FROM blog_posts bp
     LEFT JOIN seo_results sr ON sr.post_id = bp.id
-    WHERE bp.instructor_id = ? AND bp.published_at >= ? AND bp.published_at < ? AND sr.id IS NULL
+    WHERE bp.instructor_id = ? AND bp.published_at >= ? AND bp.published_at <= ? AND sr.id IS NULL
     ORDER BY bp.published_at DESC`, [instructorId, weekStart, weekEnd]);
 }
 
@@ -282,7 +282,7 @@ function getSeoResults(instructorId, limit = 10) {
 function getAvgSeoScore(instructorId, weekStart, weekEnd) {
   const row = _get(`SELECT AVG(total_score) AS avg_score FROM seo_results sr
     JOIN blog_posts bp ON bp.id = sr.post_id
-    WHERE sr.instructor_id = ? AND bp.published_at >= ? AND bp.published_at < ?`,
+    WHERE sr.instructor_id = ? AND bp.published_at >= ? AND bp.published_at <= ?`,
     [instructorId, weekStart, weekEnd]);
   return row && row.avg_score != null ? Math.round(row.avg_score) : null;
 }
@@ -296,13 +296,13 @@ function addReview(data) {
 }
 
 function getReviewCount(instructorId, weekStart, weekEnd) {
-  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date < ?',
+  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
     [instructorId, weekStart, weekEnd]);
   return row ? row.cnt : 0;
 }
 
 function getReviewCountMonth(instructorId, monthStart, monthEnd) {
-  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date < ?',
+  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
     [instructorId, monthStart, monthEnd]);
   return row ? row.cnt : 0;
 }

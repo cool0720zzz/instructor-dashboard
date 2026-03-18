@@ -215,13 +215,13 @@ export default function UiSettingsModal({ onClose, opacity, onOpacityChange }) {
           <label className="text-xs text-gray-400 font-medium">시작프로그램 자동실행</label>
           <button
             onClick={() => setAutoStart(!autoStart)}
-            className={`w-10 h-5 rounded-full transition-colors relative ${
+            className={`w-11 h-6 rounded-full transition-colors relative shrink-0 overflow-hidden ${
               autoStart ? 'bg-blue-600' : 'bg-gray-600'
             }`}
           >
             <span
-              className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                autoStart ? 'translate-x-5' : 'translate-x-0.5'
+              className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                autoStart ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </button>

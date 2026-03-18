@@ -25,6 +25,7 @@ function createMainWindow() {
   });
 
   mainWindow = new BrowserWindow({
+    icon: path.join(__dirname, '../../assets/icon.png'),
     transparent: false,
     frame: false,
     alwaysOnTop: false,

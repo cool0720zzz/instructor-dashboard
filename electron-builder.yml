@@ -1,5 +1,5 @@
-appId: com.instructor.dashboard
-productName: 강사 활동 대시보드
+appId: com.lino.manager
+productName: LINO Manager
 directories:
   output: dist/electron
 files:
@@ -9,6 +9,10 @@ files:
   - node_modules/**/*
   - package.json
 forceCodeSigning: false
+publish:
+  provider: github
+  owner: cool0720zzz
+  repo: instructor-dashboard
 win:
   target:
     - target: nsis
@@ -24,5 +28,6 @@ nsis:
   installerHeaderIcon: assets/icon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: 강사 활동 대시보드
+  shortcutName: LINO매니저
+  unicode: true
   runAfterFinish: true

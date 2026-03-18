@@ -12,6 +12,12 @@
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
       "runtimeArgs": ["admin/server/index.js"],
       "port": 3000
+    },
+    {
+      "name": "admin-vite",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["admin/node_modules/vite/bin/vite.js", "--port", "5174", "--strictPort"],
+      "port": 5174
     }
   ]
 }

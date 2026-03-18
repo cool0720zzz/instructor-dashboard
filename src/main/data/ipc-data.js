@@ -6,36 +6,7 @@ const db = require('./db');
 const { refreshAllFeeds } = require('./rss');
 const { analyzeSeoPost } = require('./seoAnalyzer');
 const { crawlBlogPost } = require('./crawler');
-
-/**
- * Get date range helpers for the current week (Mon-Sun) and current month.
- */
-function _getCurrentWeekRange() {
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-
-  const nextMonday = new Date(monday);
-  nextMonday.setDate(monday.getDate() + 7);
-
-  return {
-    weekStart: monday.toISOString(),
-    weekEnd: nextMonday.toISOString(),
-  };
-}
-
-function _getCurrentMonthRange() {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-  return {
-    monthStart: monthStart.toISOString(),
-    monthEnd: monthEnd.toISOString(),
-  };
-}
+const { getWeekRangeISO, getMonthRangeISO } = require('./dateRanges');
 
 /**
  * Register all data-related IPC handlers.
@@ -48,8 +19,8 @@ function registerDataIpcHandlers() {
   ipcMain.handle(channels.GET_DASHBOARD_DATA, async () => {
     try {
       const instructors = db.getAllInstructors();
-      const { weekStart, weekEnd } = _getCurrentWeekRange();
-      const { monthStart, monthEnd } = _getCurrentMonthRange();
+      const { start: weekStart, end: weekEnd } = getWeekRangeISO();
+      const { start: monthStart, end: monthEnd } = getMonthRangeISO();
 
       const plan = db.getSetting('plan') || 'free';
       const { PLANS } = require('../../../shared/constants');
@@ -114,7 +85,7 @@ function registerDataIpcHandlers() {
         ? [db.getInstructor(instructorId)].filter(Boolean)
         : db.getAllInstructors();
 
-      const { weekStart, weekEnd } = _getCurrentWeekRange();
+      const { start: weekStart, end: weekEnd } = getWeekRangeISO();
       const results = [];
 
       for (const instructor of instructors) {
