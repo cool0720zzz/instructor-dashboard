@@ -25,18 +25,79 @@ const isDev = !app.isPackaged;
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
+// Track update state so settings modal can query it
+let updateState = 'idle'; // idle | checking | available | downloading | downloaded | error
+let updateError = null;
+
+autoUpdater.on('checking-for-update', () => {
+  updateState = 'checking';
+  _broadcastUpdateStatus();
+});
+
 autoUpdater.on('update-available', () => {
+  updateState = 'available';
+  _broadcastUpdateStatus();
   const win = getMainWindow();
   if (win && !win.isDestroyed()) win.webContents.send('update-available');
 });
 
+autoUpdater.on('update-not-available', () => {
+  updateState = 'idle';
+  _broadcastUpdateStatus();
+});
+
+autoUpdater.on('download-progress', () => {
+  updateState = 'downloading';
+  _broadcastUpdateStatus();
+});
+
 autoUpdater.on('update-downloaded', () => {
+  updateState = 'downloaded';
+  _broadcastUpdateStatus();
   const win = getMainWindow();
   if (win && !win.isDestroyed()) win.webContents.send('update-downloaded');
 });
 
+autoUpdater.on('error', (err) => {
+  updateState = 'error';
+  updateError = err?.message || 'Unknown error';
+  _broadcastUpdateStatus();
+});
+
+function _broadcastUpdateStatus() {
+  try {
+    const allWins = BrowserWindow.getAllWindows();
+    for (const w of allWins) {
+      if (!w.isDestroyed()) {
+        w.webContents.send('update-status-changed', { state: updateState, error: updateError });
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 ipcMain.handle('install-update', () => {
   autoUpdater.quitAndInstall();
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
+ipcMain.handle('get-update-status', () => {
+  return { state: updateState, error: updateError };
+});
+
+ipcMain.handle('check-for-update', async () => {
+  try {
+    updateState = 'checking';
+    updateError = null;
+    const result = await autoUpdater.checkForUpdatesAndNotify();
+    return { success: true, version: result?.updateInfo?.version || null };
+  } catch (err) {
+    updateState = 'error';
+    updateError = err.message;
+    return { success: false, error: err.message };
+  }
 });
 
 function registerDataIpcHandlers() {

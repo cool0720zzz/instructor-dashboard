@@ -64,7 +64,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(channels.WEEKLY_CHECK_DONE, handler);
   },
 
+  // App version
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
   // Auto-update
+  getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
   onUpdateAvailable: (callback) => {
     const handler = () => callback();
     ipcRenderer.on('update-available', handler);
@@ -75,5 +81,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update-downloaded', handler);
     return () => ipcRenderer.removeListener('update-downloaded', handler);
   },
-  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatusChanged: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('update-status-changed', handler);
+    return () => ipcRenderer.removeListener('update-status-changed', handler);
+  },
 });

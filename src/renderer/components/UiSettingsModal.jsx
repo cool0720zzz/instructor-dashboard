@@ -14,6 +14,12 @@ export default function UiSettingsModal({ onClose, opacity, onOpacityChange }) {
   const [licenseError, setLicenseError] = useState('');
   const [showKeyInput, setShowKeyInput] = useState(false);
 
+  // Version & update state
+  const [appVersion, setAppVersion] = useState('');
+  // updateState: idle | checking | available | downloading | downloaded | error
+  const [updateState, setUpdateState] = useState('idle');
+  const [updateError, setUpdateError] = useState('');
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -24,10 +30,29 @@ export default function UiSettingsModal({ onClose, opacity, onOpacityChange }) {
           setAutoStart(settings.autoStart || false);
           setLicenseKey(settings.licenseKey || '');
           setPlan(settings.plan || '');
+          if (window.electronAPI.getAppVersion) {
+            const ver = await window.electronAPI.getAppVersion();
+            setAppVersion(ver || '');
+          }
+          if (window.electronAPI.getUpdateStatus) {
+            const status = await window.electronAPI.getUpdateStatus();
+            setUpdateState(status.state || 'idle');
+            setUpdateError(status.error || '');
+          }
         }
       } catch { /* defaults */ }
     }
     loadSettings();
+  }, []);
+
+  // Listen for update status changes in real-time
+  useEffect(() => {
+    if (!window.electronAPI?.onUpdateStatusChanged) return;
+    const unsub = window.electronAPI.onUpdateStatusChanged(({ state, error }) => {
+      setUpdateState(state || 'idle');
+      setUpdateError(error || '');
+    });
+    return () => unsub?.();
   }, []);
 
   const handleOpacityPreview = (val) => {
@@ -77,6 +102,20 @@ export default function UiSettingsModal({ onClose, opacity, onOpacityChange }) {
       setLicenseError('서버 연결에 실패했습니다');
     } finally {
       setLicenseLoading(false);
+    }
+  };
+
+  const handleCheckUpdate = async () => {
+    if (!window.electronAPI?.checkForUpdate) return;
+    setUpdateState('checking');
+    setUpdateError('');
+    await window.electronAPI.checkForUpdate();
+    // State will be updated via onUpdateStatusChanged listener
+  };
+
+  const handleInstallUpdate = () => {
+    if (window.electronAPI?.installUpdate) {
+      window.electronAPI.installUpdate();
     }
   };
 
@@ -233,6 +272,79 @@ export default function UiSettingsModal({ onClose, opacity, onOpacityChange }) {
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-500">플랜</span>
           <span className="text-xs text-gray-300">무료</span>
+        </div>
+
+        {/* ─── Version & Update ─── */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-500">버전</span>
+            <span className="text-xs text-gray-400 font-mono">v{appVersion || '...'}</span>
+          </div>
+
+          <div className="bg-gray-700/30 rounded-lg p-3">
+            {updateState === 'downloaded' ? (
+              /* 업데이트 다운로드 완료 → 설치 버튼 */
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-xs text-green-400">새 버전이 준비되었습니다</span>
+                </div>
+                <button
+                  onClick={handleInstallUpdate}
+                  className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  지금 업데이트
+                </button>
+              </div>
+            ) : updateState === 'checking' ? (
+              /* 확인 중 */
+              <div className="flex items-center gap-2">
+                <svg className="animate-spin w-3 h-3 text-blue-400" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                  <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                <span className="text-xs text-blue-400">업데이트 확인 중...</span>
+              </div>
+            ) : updateState === 'available' || updateState === 'downloading' ? (
+              /* 다운로드 중 */
+              <div className="flex items-center gap-2">
+                <svg className="animate-spin w-3 h-3 text-yellow-400" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                  <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                <span className="text-xs text-yellow-400">업데이트 다운로드 중...</span>
+              </div>
+            ) : updateState === 'error' ? (
+              /* 오류 */
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-400" />
+                  <span className="text-xs text-red-400">업데이트 확인 실패</span>
+                </div>
+                {updateError && <p className="text-[10px] text-gray-500">{updateError}</p>}
+                <button
+                  onClick={handleCheckUpdate}
+                  className="px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  다시 시도
+                </button>
+              </div>
+            ) : (
+              /* idle — 최신 버전 or 체크 전 */
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-gray-500" />
+                  <span className="text-xs text-gray-400">현재 최신 버전입니다</span>
+                </div>
+                <button
+                  onClick={handleCheckUpdate}
+                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  업데이트 확인
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ─── Admin Page Link ─── */}
