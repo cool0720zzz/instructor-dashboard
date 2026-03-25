@@ -41,11 +41,11 @@ export default function InstructorForm() {
   const loadInstructor = async () => {
     // Fetch all customers and find the instructor
     try {
-      const res = await authFetch(`${getApiBase()}/api/customers`);
+      const res = await authFetch(`${getApiBase()}/admin/customers`);
       if (res.ok) {
         const customers = await res.json();
         for (const c of customers) {
-          const detailRes = await authFetch(`${getApiBase()}/api/customers/${c.id}`);
+          const detailRes = await authFetch(`${getApiBase()}/admin/customers/${c.id}`);
           if (detailRes.ok) {
             const detail = await detailRes.json();
             const found = (detail.instructors || []).find((i) => i.id === id);
@@ -79,12 +79,12 @@ export default function InstructorForm() {
     try {
       let res;
       if (isEdit) {
-        res = await authFetch(`${getApiBase()}/api/instructors/${id}`, {
+        res = await authFetch(`${getApiBase()}/admin/instructors/${id}`, {
           method: 'PATCH',
           body: JSON.stringify(body),
         });
       } else {
-        res = await authFetch(`${getApiBase()}/api/customers/${customerId}/instructors`, {
+        res = await authFetch(`${getApiBase()}/admin/customers/${customerId}/instructors`, {
           method: 'POST',
           body: JSON.stringify(body),
         });

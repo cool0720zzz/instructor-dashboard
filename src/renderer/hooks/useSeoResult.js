@@ -26,6 +26,29 @@ export function useSeoResult() {
     }
   }, []);
 
+  // Fetch all results then find by specific seoResultId
+  const fetchSeoResultById = useCallback(async (instructorId, seoResultId) => {
+    setLoading(true);
+    try {
+      if (window.electronAPI) {
+        const results = await window.electronAPI.getSeoResults(instructorId);
+        if (results && results.length > 0) {
+          const found = results.find(r => r.id === seoResultId);
+          setSeoDetail(found || results[0]);
+        } else {
+          setSeoDetail(null);
+        }
+      } else {
+        setSeoDetail(null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch SEO result by ID:', err);
+      setSeoDetail(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const triggerAnalysis = useCallback(async (instructorId) => {
     setAnalyzing(true);
     try {
@@ -45,5 +68,5 @@ export function useSeoResult() {
     setSeoDetail(null);
   }, []);
 
-  return { seoDetail, loading, analyzing, fetchSeoResults, triggerAnalysis, clearSeoDetail };
+  return { seoDetail, loading, analyzing, fetchSeoResults, fetchSeoResultById, triggerAnalysis, clearSeoDetail };
 }

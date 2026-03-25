@@ -3,6 +3,10 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/admin/auth/:path*", "destination": "/api/auth/:path*" },
+    { "source": "/admin/customers/:path*", "destination": "/api/customers/:path*" },
+    { "source": "/admin/customers", "destination": "/api/customers/index" },
+    { "source": "/admin/instructors/:path*", "destination": "/api/instructors/:path*" },
+    { "source": "/((?!api/|admin/).*)", "destination": "/index.html" }
   ]
 }

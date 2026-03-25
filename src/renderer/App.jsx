@@ -9,24 +9,24 @@ import { useAlerts } from './hooks/useAlerts';
 function getRoute() {
   const hash = window.location.hash.replace('#', '');
   if (hash === '/settings') return { page: 'settings' };
-  const seoMatch = hash.match(/^\/seo\/(\d+)$/);
-  if (seoMatch) return { page: 'seo', instructorId: parseInt(seoMatch[1], 10) };
+  const seoMatch = hash.match(/^\/seo\/(\d+)(?:\/(\d+))?$/);
+  if (seoMatch) return { page: 'seo', instructorId: parseInt(seoMatch[1], 10), seoResultId: seoMatch[2] ? parseInt(seoMatch[2], 10) : null };
   return { page: 'dashboard' };
 }
 
 export default function App() {
   const route = getRoute();
   if (route.page === 'settings') return <SettingsApp />;
-  if (route.page === 'seo') return <SeoFloatingApp instructorId={route.instructorId} />;
+  if (route.page === 'seo') return <SeoFloatingApp instructorId={route.instructorId} seoResultId={route.seoResultId} />;
   return <DashboardApp />;
 }
 
 // ═══ SEO Floating Window ═══
-function SeoFloatingApp({ instructorId }) {
+function SeoFloatingApp({ instructorId, seoResultId }) {
   return (
     <div className="h-screen bg-transparent overflow-auto">
       <div className="bg-gray-800/95 border border-gray-700/60 rounded-lg overflow-hidden shadow-2xl">
-        <SeoPanel instructorId={instructorId} seoResults={[]} />
+        <SeoPanel instructorId={instructorId} seoResultId={seoResultId} />
       </div>
     </div>
   );

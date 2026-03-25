@@ -124,16 +124,19 @@ function registerDataIpcHandlers() {
   ipcMain.handle(channels.GET_DASHBOARD_DATA, async () => {
     try {
       const db = require('./data/db');
-      const { getWeekRangeISO, getMonthRangeISO } = require('./data/dateRanges');
+      const { getWeekRangeISO, getMonthRangeISO, getLastWeekRangeISO } = require('./data/dateRanges');
       const instructors = db.getAllInstructors();
       const { start: weekStart, end: weekEnd } = getWeekRangeISO();
       const { start: monthStart, end: monthEnd } = getMonthRangeISO();
+      const { start: lastWeekStart, end: lastWeekEnd } = getLastWeekRangeISO();
       const lastCollection = db.getSetting('last_collection');
 
       return instructors.map((inst) => {
         const blogWeek = db.getBlogCount(inst.id, weekStart, weekEnd);
+        const blogLastWeek = db.getBlogCount(inst.id, lastWeekStart, lastWeekEnd);
         const blogMonth = db.getBlogCountMonth(inst.id, monthStart, monthEnd);
         const reviewWeek = db.getReviewCount(inst.id, weekStart, weekEnd);
+        const reviewLastWeek = db.getReviewCount(inst.id, lastWeekStart, lastWeekEnd);
         const reviewMonth = db.getReviewCountMonth(inst.id, monthStart, monthEnd);
         const seoResults = db.getSeoResults(inst.id, 3);
         const lastWeek = db.getLastWeekStatus(inst.id);
@@ -143,8 +146,10 @@ function registerDataIpcHandlers() {
           name: inst.name,
           displayColor: inst.display_color,
           blogWeek,
+          blogLastWeek,
           blogMonth,
           reviewWeek,
+          reviewLastWeek,
           reviewMonth,
           seoResults: seoResults || [],
           status: lastWeek?.status || 'ok',

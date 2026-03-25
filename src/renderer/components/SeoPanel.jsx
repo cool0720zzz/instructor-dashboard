@@ -3,12 +3,16 @@ import { useSeoResult } from '../hooks/useSeoResult';
 import ScoreGauge from './ScoreGauge';
 import SeoChecklist from './SeoChecklist';
 
-export default function SeoPanel({ instructorId, seoResults = [] }) {
-  const { seoDetail, loading, analyzing, fetchSeoResults, triggerAnalysis } = useSeoResult();
+export default function SeoPanel({ instructorId, seoResultId }) {
+  const { seoDetail, loading, analyzing, fetchSeoResults, fetchSeoResultById, triggerAnalysis } = useSeoResult();
 
   useEffect(() => {
-    fetchSeoResults(instructorId);
-  }, [instructorId, fetchSeoResults]);
+    if (seoResultId) {
+      fetchSeoResultById(instructorId, seoResultId);
+    } else {
+      fetchSeoResults(instructorId);
+    }
+  }, [instructorId, seoResultId, fetchSeoResults, fetchSeoResultById]);
 
   if (loading) {
     return (
@@ -68,10 +72,14 @@ export default function SeoPanel({ instructorId, seoResults = [] }) {
       {/* Total Score Gauge */}
       <ScoreGauge score={seoDetail.total_score} grade={seoDetail.grade} />
 
-      {/* Post info */}
+      {/* Post Title as link */}
       {seoDetail.post_title && (
-        <div className="text-xs text-gray-400 truncate" title={seoDetail.post_title}>
-          {seoDetail.post_title}
+        <div
+          className={`text-xs ${seoDetail.post_url ? 'text-blue-400 hover:text-blue-300 cursor-pointer hover:underline' : 'text-gray-400'}`}
+          title={seoDetail.post_title}
+          onClick={seoDetail.post_url ? () => window.electronAPI?.openExternal(seoDetail.post_url) : undefined}
+        >
+          {seoDetail.post_url ? '🔗 ' : ''}{seoDetail.post_title}
         </div>
       )}
 
@@ -98,16 +106,6 @@ export default function SeoPanel({ instructorId, seoResults = [] }) {
 
       {/* Checklist */}
       {checklist.length > 0 && <SeoChecklist items={checklist} />}
-
-      {/* Re-analyze button */}
-      <button
-        onClick={() => triggerAnalysis(instructorId)}
-        disabled={analyzing}
-        className="w-full py-1.5 text-xs text-gray-400 hover:text-blue-400 transition-colors
-                   border border-gray-700/40 rounded-md hover:border-blue-500/40"
-      >
-        {analyzing ? '분석 중...' : '다시 분석'}
-      </button>
     </div>
   );
 }

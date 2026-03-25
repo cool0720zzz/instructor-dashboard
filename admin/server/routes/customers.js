@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
 
 // POST /admin/customers
 router.post('/', (req, res) => {
-  const { email, plan, naver_place_url, expires_at } = req.body;
+  const { email, plan, naver_place_url, expires_at, business_name } = req.body;
 
   if (!email) {
     return res.status(400).json({ error: 'Email is required' });
@@ -50,9 +50,9 @@ router.post('/', (req, res) => {
   const maxInstructors = PLAN_LIMITS[selectedPlan] || 3;
 
   const result = run(
-    `INSERT INTO customers (email, license_key, plan, max_instructors, naver_place_url, is_active, expires_at)
-     VALUES (?, ?, ?, ?, ?, 1, ?)`,
-    [email, licenseKey, selectedPlan, maxInstructors, naver_place_url || null, expires_at || null]
+    `INSERT INTO customers (business_name, email, license_key, plan, max_instructors, naver_place_url, is_active, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+    [business_name || '', email, licenseKey, selectedPlan, maxInstructors, naver_place_url || null, expires_at || null]
   );
 
   const customer = get('SELECT * FROM customers WHERE id = ?', [result.lastInsertRowid]);

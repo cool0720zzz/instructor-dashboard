@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
 -- Customers table (each customer has a license)
 CREATE TABLE IF NOT EXISTS customers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_name TEXT DEFAULT '',
   email TEXT UNIQUE NOT NULL,
   license_key TEXT UNIQUE NOT NULL,
   plan TEXT DEFAULT 'free' CHECK(plan IN ('free', 'basic', 'standard', 'premium')),

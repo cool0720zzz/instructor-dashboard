@@ -147,7 +147,7 @@ function snapWindow(position) {
 
 // ═══ SEO Floating Window ═══
 
-function openSeoWindow({ x, y, width, instructorId }) {
+function openSeoWindow({ x, y, width, instructorId, seoResultId }) {
   closeSeoWindow();
 
   seoWindow = new BrowserWindow({
@@ -170,7 +170,7 @@ function openSeoWindow({ x, y, width, instructorId }) {
     },
   });
 
-  const hash = `/seo/${instructorId}`;
+  const hash = seoResultId ? `/seo/${instructorId}/${seoResultId}` : `/seo/${instructorId}`;
   if (isDev) {
     seoWindow.loadURL(`http://localhost:5173/#${hash}`);
   } else {
@@ -298,7 +298,7 @@ function registerWindowIpc() {
   });
 
   // SEO floating window
-  ipcMain.handle(channels.OPEN_SEO_WINDOW, (_, { cardBounds, instructorId }) => {
+  ipcMain.handle(channels.OPEN_SEO_WINDOW, (_, { cardBounds, instructorId, seoResultId }) => {
     if (!mainWindow) return;
     const contentBounds = mainWindow.getContentBounds();
     const screenX = contentBounds.x + cardBounds.x;
@@ -308,6 +308,7 @@ function registerWindowIpc() {
       y: screenY,
       width: Math.max(cardBounds.width, 220),
       instructorId,
+      seoResultId,
     });
   });
 

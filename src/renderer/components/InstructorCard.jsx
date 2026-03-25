@@ -31,8 +31,10 @@ export default function InstructorCard({ instructor, layout }) {
     name,
     status = 'ok',
     blogWeek = 0,
+    blogLastWeek = 0,
     blogMonth = 0,
     reviewWeek = 0,
+    reviewLastWeek = 0,
     reviewMonth = 0,
     seoResults = [],
   } = instructor;
@@ -40,8 +42,8 @@ export default function InstructorCard({ instructor, layout }) {
   const borderClass = STATUS_BORDER_CLASSES[status] || STATUS_BORDER_CLASSES.ok;
   const recentSeo = seoResults.slice(0, 3);
 
-  // Open SEO as a floating BrowserWindow positioned below this card
-  const handleSeoClick = useCallback(() => {
+  // Click badge → open SEO detail in floating BrowserWindow
+  const handleBadgeClick = useCallback((seoResult) => {
     if (!window.electronAPI?.openSeoWindow || !cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     window.electronAPI.openSeoWindow({
@@ -52,6 +54,7 @@ export default function InstructorCard({ instructor, layout }) {
         height: Math.round(rect.height),
       },
       instructorId: instructor.id,
+      seoResultId: seoResult.id,
     });
   }, [instructor.id]);
 
@@ -66,11 +69,13 @@ export default function InstructorCard({ instructor, layout }) {
       <div ref={cardRef} className={`flex items-center gap-3 px-3 py-1.5 bg-gray-800/80 border-2 rounded-lg shrink-0 ${borderClass}`}>
         <AlertBadge status={status} />
         <span className="text-white text-xs font-semibold whitespace-nowrap">{name}</span>
-        <span className="text-gray-400 text-[10px] whitespace-nowrap">블로그 {blogWeek}</span>
-        <span className="text-gray-400 text-[10px] whitespace-nowrap">리뷰 {reviewWeek}</span>
+        <span className="text-gray-400 text-[10px] whitespace-nowrap">블로그 {blogWeek}<span className="text-gray-500">/{blogLastWeek}</span></span>
+        <span className="text-gray-400 text-[10px] whitespace-nowrap">리뷰 {reviewWeek}<span className="text-gray-500">/{reviewLastWeek}</span></span>
         {topGrade && topGradeStyle && (
-          <span className="seo-badge text-[10px] py-0 px-1.5"
-                style={{ backgroundColor: topGradeStyle.bg, color: topGradeStyle.color }}>
+          <span className="seo-badge text-[10px] py-0 px-1.5 cursor-pointer hover:opacity-80"
+                style={{ backgroundColor: topGradeStyle.bg, color: topGradeStyle.color }}
+                title={recentSeo[0].post_title || ''}
+                onClick={() => handleBadgeClick(recentSeo[0])}>
             {topGrade} {recentSeo[0].total_score}
           </span>
         )}
@@ -97,6 +102,10 @@ export default function InstructorCard({ instructor, layout }) {
             <span className="font-mono font-semibold text-white">{blogWeek}건</span>
           </div>
           <div className="flex justify-between text-gray-300">
+            <span>블로그 지난주</span>
+            <span className="font-mono font-semibold text-gray-400">{blogLastWeek}건</span>
+          </div>
+          <div className="flex justify-between text-gray-300">
             <span>블로그 이번달</span>
             <span className="font-mono font-semibold text-white">{blogMonth}건</span>
           </div>
@@ -105,20 +114,27 @@ export default function InstructorCard({ instructor, layout }) {
             <span className="font-mono font-semibold text-white">{reviewWeek}건</span>
           </div>
           <div className="flex justify-between text-gray-300">
+            <span>리뷰 지난주</span>
+            <span className="font-mono font-semibold text-gray-400">{reviewLastWeek}건</span>
+          </div>
+          <div className="flex justify-between text-gray-300">
             <span>리뷰 이번달</span>
             <span className="font-mono font-semibold text-white">{reviewMonth}건</span>
           </div>
         </div>
 
-        {/* SEO Badges + Toggle */}
+        {/* SEO Badges */}
         <div className="px-3 py-2 border-t border-gray-700/40">
-          <div className="flex items-center gap-1.5 mb-1.5">
+          <div className="flex items-center gap-1.5">
             {recentSeo.map((seo, idx) => {
               const grade = seo.grade || getGradeFromScore(seo.total_score);
               const gradeStyle = SEO_GRADES[grade] || SEO_GRADES.D;
               return (
-                <span key={seo.id || idx} className="seo-badge"
-                      style={{ backgroundColor: gradeStyle.bg, color: gradeStyle.color }}>
+                <span key={seo.id || idx}
+                      className="seo-badge cursor-pointer transition-all hover:scale-105 hover:opacity-80"
+                      style={{ backgroundColor: gradeStyle.bg, color: gradeStyle.color }}
+                      title={seo.post_title || 'SEO 분석 보기'}
+                      onClick={() => handleBadgeClick(seo)}>
                   {grade} {seo.total_score}
                 </span>
               );
@@ -127,15 +143,6 @@ export default function InstructorCard({ instructor, layout }) {
               <span className="text-gray-500 text-xs">SEO 데이터 없음</span>
             )}
           </div>
-          <button
-            onClick={handleSeoClick}
-            className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
-          >
-            <span>SEO 분석</span>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-              <path d="M2 3h6L5 7z" />
-            </svg>
-          </button>
         </div>
       </div>
     </div>

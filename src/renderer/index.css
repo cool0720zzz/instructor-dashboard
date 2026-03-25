@@ -115,3 +115,20 @@ input[type='range']::-webkit-slider-thumb {
 .animate-modal-in {
   animation: modal-in 0.2s ease-out;
 }
+
+@keyframes slideDown {
+  0% {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    max-height: 500px;
+    transform: translateY(0);
+  }
+}
+.animate-slideDown {
+  animation: slideDown 0.25s ease-out;
+  overflow: hidden;
+}

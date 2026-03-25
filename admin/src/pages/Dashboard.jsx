@@ -5,6 +5,7 @@ import { authFetch, getApiBase } from '../App.jsx';
 export default function Dashboard() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newBusinessName, setNewBusinessName] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -15,10 +16,18 @@ export default function Dashboard() {
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
+    setLoadError('');
     try {
-      const res = await authFetch(`${getApiBase()}/api/customers`);
-      if (res.ok) setCustomers(await res.json());
+      const res = await authFetch(`${getApiBase()}/admin/customers`);
+      if (res.ok) {
+        setCustomers(await res.json());
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setLoadError(`API Error ${res.status}: ${errData.error || res.statusText}`);
+        console.error('API Error:', res.status, errData);
+      }
     } catch (err) {
+      setLoadError(`네트워크 오류: ${err.message}`);
       console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
@@ -29,7 +38,7 @@ export default function Dashboard() {
     e.preventDefault();
     setAddError('');
     try {
-      const res = await authFetch(`${getApiBase()}/api/customers`, {
+      const res = await authFetch(`${getApiBase()}/admin/customers`, {
         method: 'POST',
         body: JSON.stringify({
           email: newEmail,
@@ -48,7 +57,7 @@ export default function Dashboard() {
   const handleDeactivate = async (id) => {
     if (!confirm('이 고객의 라이선스를 비활성화하시겠습니까?')) return;
     try {
-      await authFetch(`${getApiBase()}/api/customers/${id}`, { method: 'DELETE' });
+      await authFetch(`${getApiBase()}/admin/customers/${id}/license`, { method: 'DELETE' });
       loadData();
     } catch (err) { console.error('Failed to deactivate:', err); }
   };
@@ -69,6 +78,20 @@ export default function Dashboard() {
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ background: '#450a0a', border: '1px solid #7f1d1d', borderRadius: '8px', padding: '16px' }}>
+          <div style={{ color: '#fca5a5', fontWeight: 600, marginBottom: '8px' }}>데이터 로드 실패</div>
+          <div style={{ color: '#fecaca', fontSize: '14px' }}>{loadError}</div>
+          <button onClick={loadData} style={{ marginTop: '12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px' }}>
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

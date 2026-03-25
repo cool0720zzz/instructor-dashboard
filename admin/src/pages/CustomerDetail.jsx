@@ -16,7 +16,7 @@ export default function CustomerDetail() {
 
   const loadCustomer = async () => {
     try {
-      const res = await authFetch(`${getApiBase()}/api/customers/${id}`);
+      const res = await authFetch(`${getApiBase()}/admin/customers/${id}`);
       if (res.ok) {
         const data = await res.json();
         setCustomer(data);
@@ -34,7 +34,7 @@ export default function CustomerDetail() {
 
   const handlePlanChange = async () => {
     try {
-      const res = await authFetch(`${getApiBase()}/api/customers/${id}`, {
+      const res = await authFetch(`${getApiBase()}/admin/customers/${id}/plan`, {
         method: 'PATCH',
         body: JSON.stringify({ plan: newPlan }),
       });
@@ -44,7 +44,7 @@ export default function CustomerDetail() {
 
   const handlePlaceUpdate = async () => {
     try {
-      const res = await authFetch(`${getApiBase()}/api/customers/${id}/place`, {
+      const res = await authFetch(`${getApiBase()}/admin/customers/${id}/place`, {
         method: 'PATCH',
         body: JSON.stringify({ naver_place_url: newPlaceUrl }),
       });
@@ -55,7 +55,7 @@ export default function CustomerDetail() {
   const handleDeactivate = async () => {
     if (!confirm('이 고객의 라이선스를 비활성화하시겠습니까?')) return;
     try {
-      await authFetch(`${getApiBase()}/api/customers/${id}`, { method: 'DELETE' });
+      await authFetch(`${getApiBase()}/admin/customers/${id}/license`, { method: 'DELETE' });
       loadCustomer();
     } catch (err) { console.error('Failed to deactivate:', err); }
   };
@@ -63,7 +63,7 @@ export default function CustomerDetail() {
   const handleDeleteInstructor = async (instructorId) => {
     if (!confirm('이 강사를 삭제하시겠습니까?')) return;
     try {
-      await authFetch(`${getApiBase()}/api/instructors/${instructorId}`, { method: 'DELETE' });
+      await authFetch(`${getApiBase()}/admin/instructors/${instructorId}`, { method: 'DELETE' });
       loadCustomer();
     } catch (err) { console.error('Failed to delete instructor:', err); }
   };

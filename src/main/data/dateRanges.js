@@ -61,9 +61,34 @@ function _fmtLocal(d) {
   return `${y}-${m}-${day} ${h}:${min}:${s}`;
 }
 
+/**
+ * Last week range: previous Monday 00:00:00.000 ~ previous Sunday 23:59:59.999
+ */
+function getLastWeekRange() {
+  const { start: thisMonday } = getThisWeekRange();
+  const lastMonday = new Date(thisMonday);
+  lastMonday.setDate(thisMonday.getDate() - 7);
+  lastMonday.setHours(0, 0, 0, 0);
+
+  const lastSunday = new Date(lastMonday);
+  lastSunday.setDate(lastMonday.getDate() + 6);
+  lastSunday.setHours(23, 59, 59, 999);
+
+  return { start: lastMonday, end: lastSunday };
+}
+
+function getLastWeekRangeISO() {
+  const { start, end } = getLastWeekRange();
+  const result = { start: start.toISOString(), end: end.toISOString() };
+  console.log(`[DateRange] Last week: ${_fmtLocal(start)} ~ ${_fmtLocal(end)} (ISO: ${result.start} ~ ${result.end})`);
+  return result;
+}
+
 module.exports = {
   getThisWeekRange,
   getThisMonthRange,
   getWeekRangeISO,
   getMonthRangeISO,
+  getLastWeekRange,
+  getLastWeekRangeISO,
 };

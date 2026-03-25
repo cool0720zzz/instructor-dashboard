@@ -31,6 +31,15 @@ async function initDatabase() {
   const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
   db.run(schema);
 
+  // Migration: add business_name column if missing
+  try {
+    const cols = db.exec("PRAGMA table_info(customers)");
+    const colNames = cols.length > 0 ? cols[0].values.map(r => r[1]) : [];
+    if (!colNames.includes('business_name')) {
+      db.run("ALTER TABLE customers ADD COLUMN business_name TEXT DEFAULT ''");
+    }
+  } catch { /* ignore if already exists */ }
+
   saveDb();
   return db;
 }

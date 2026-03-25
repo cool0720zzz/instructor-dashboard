@@ -271,7 +271,7 @@ function saveSeoResult(data) {
 function getSeoResults(instructorId, limit = 10) {
   const rows = _all(`SELECT sr.*, bp.post_url, bp.post_title FROM seo_results sr
     LEFT JOIN blog_posts bp ON bp.id = sr.post_id
-    WHERE sr.instructor_id = ? ORDER BY sr.analyzed_at DESC LIMIT ?`, [instructorId, limit]);
+    WHERE sr.instructor_id = ? ORDER BY bp.published_at DESC, sr.analyzed_at DESC LIMIT ?`, [instructorId, limit]);
   return rows.map((r) => ({
     ...r,
     detail_json: _safeJsonParse(r.detail_json, {}),
@@ -296,15 +296,38 @@ function addReview(data) {
 }
 
 function getReviewCount(instructorId, weekStart, weekEnd) {
-  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
-    [instructorId, weekStart, weekEnd]);
-  return row ? row.cnt : 0;
+  // Check if instructor has keywords set
+  const instructor = _get('SELECT keywords FROM instructors WHERE id = ?', [instructorId]);
+  const keywords = _safeJsonParse(instructor?.keywords, []);
+  const hasKeywords = keywords.length > 0 && keywords.some(k => k && k.trim());
+
+  if (hasKeywords) {
+    // Keywords set → count only matched reviews
+    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
+      [instructorId, weekStart, weekEnd]);
+    return row ? row.cnt : 0;
+  } else {
+    // No keywords → count ALL reviews in the period
+    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE review_date >= ? AND review_date <= ?',
+      [weekStart, weekEnd]);
+    return row ? row.cnt : 0;
+  }
 }
 
 function getReviewCountMonth(instructorId, monthStart, monthEnd) {
-  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
-    [instructorId, monthStart, monthEnd]);
-  return row ? row.cnt : 0;
+  const instructor = _get('SELECT keywords FROM instructors WHERE id = ?', [instructorId]);
+  const keywords = _safeJsonParse(instructor?.keywords, []);
+  const hasKeywords = keywords.length > 0 && keywords.some(k => k && k.trim());
+
+  if (hasKeywords) {
+    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
+      [instructorId, monthStart, monthEnd]);
+    return row ? row.cnt : 0;
+  } else {
+    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE review_date >= ? AND review_date <= ?',
+      [monthStart, monthEnd]);
+    return row ? row.cnt : 0;
+  }
 }
 
 // ─── Weekly checks ──────────────────────────────────────────────────────────
