@@ -295,7 +295,15 @@ function addReview(data) {
     [data.review_text, data.review_date || new Date().toISOString(), data.matched_instructor_id || null]);
 }
 
+// Normalize ISO dates to YYYY-MM-DD for comparison with review_date stored as YYYY-MM-DD
+function _toDateOnly(isoStr) {
+  if (!isoStr) return isoStr;
+  return isoStr.slice(0, 10);
+}
+
 function getReviewCount(instructorId, weekStart, weekEnd) {
+  const start = _toDateOnly(weekStart);
+  const end = _toDateOnly(weekEnd);
   // Check if instructor has keywords set
   const instructor = _get('SELECT keywords FROM instructors WHERE id = ?', [instructorId]);
   const keywords = _safeJsonParse(instructor?.keywords, []);
@@ -304,28 +312,30 @@ function getReviewCount(instructorId, weekStart, weekEnd) {
   if (hasKeywords) {
     // Keywords set → count only matched reviews
     const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
-      [instructorId, weekStart, weekEnd]);
+      [instructorId, start, end]);
     return row ? row.cnt : 0;
   } else {
     // No keywords → count ALL reviews in the period
     const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE review_date >= ? AND review_date <= ?',
-      [weekStart, weekEnd]);
+      [start, end]);
     return row ? row.cnt : 0;
   }
 }
 
 function getReviewCountMonth(instructorId, monthStart, monthEnd) {
+  const start = _toDateOnly(monthStart);
+  const end = _toDateOnly(monthEnd);
   const instructor = _get('SELECT keywords FROM instructors WHERE id = ?', [instructorId]);
   const keywords = _safeJsonParse(instructor?.keywords, []);
   const hasKeywords = keywords.length > 0 && keywords.some(k => k && k.trim());
 
   if (hasKeywords) {
     const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
-      [instructorId, monthStart, monthEnd]);
+      [instructorId, start, end]);
     return row ? row.cnt : 0;
   } else {
     const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE review_date >= ? AND review_date <= ?',
-      [monthStart, monthEnd]);
+      [start, end]);
     return row ? row.cnt : 0;
   }
 }
