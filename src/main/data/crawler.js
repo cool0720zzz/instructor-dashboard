@@ -714,14 +714,77 @@ async function _fetchBizItems(businessId) {
 }
 
 /**
- * Fetch reviews for a specific booking item using the existing HTML parser.
- * Reuses _fetchReviewsViaHtml with bizItemId filter parameter.
+ * Fetch reviews for a specific booking item via GraphQL API.
+ * Uses the Naver Place review GraphQL endpoint with bizItemId filter.
  * Returns array of { text, date }.
  */
-async function _fetchBookingItemReviews(placeId, bizItemId) {
+async function _fetchBookingItemReviews(placeId, bizItemId, businessId) {
+  const query = `query {
+  review(input: {
+    businessId: "${businessId}"
+    bizItemId: "${bizItemId}"
+    bizItemType: "STANDARD"
+    item: "0"
+    bookingBusinessId: "${businessId}"
+    startFrom: 1
+    size: 10
+    isPhotoUsed: false
+    includeContent: true
+    getUserStats: true
+    includeReceiptPhotos: true
+    getReplyPhotos: true
+    sort: "visitDateTime.desc"
+  }) {
+    reviews {
+      id
+      body
+      completedDateTime
+      visit {
+        visitDateTime
+      }
+    }
+  }
+}`;
+
   try {
-    const reviews = await _fetchReviewsViaHtml(placeId, 'visitor', bizItemId);
-    return reviews || [];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch('https://pcmap-api.place.naver.com/graphql', {
+      method: 'POST',
+      headers: {
+        ...HEADERS,
+        'Content-Type': 'application/json',
+        'Referer': `https://m.place.naver.com/restaurant/${placeId}/booking`,
+      },
+      body: JSON.stringify({
+        operationName: null,
+        query,
+        variables: {},
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    const reviews = data?.data?.review?.reviews || [];
+
+    return reviews.map(r => {
+      let date = null;
+      const dateStr = r.visit?.visitDateTime || r.completedDateTime;
+      if (dateStr) {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          date = d.toISOString().split('T')[0];
+        }
+      }
+      return {
+        text: (r.body || '').trim(),
+        date: date || new Date().toISOString().split('T')[0],
+      };
+    }).filter(r => r.text);
   } catch (err) {
     console.warn(`[Crawler] Booking item review fetch failed (${bizItemId}): ${err.message}`);
     return [];
@@ -777,7 +840,7 @@ async function crawlBookingReviews(placeUrl) {
 
     // Step 4: Fetch reviews for each matched item
     for (const item of matchedItems) {
-      const reviews = await _fetchBookingItemReviews(placeId, item.bizItemId);
+      const reviews = await _fetchBookingItemReviews(placeId, item.bizItemId, item.businessId);
       _log(`[Crawler] ${item.instructorName}: ${reviews.length} booking reviews`);
 
       for (const raw of reviews) {
