@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Open external URL
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 
+  // Auto-resize window to fit instructor cards
+  resizeToFit: (count) => ipcRenderer.invoke(channels.RESIZE_TO_FIT, count),
+
   // Layout change listener
   onLayoutChange: (callback) => {
     const handler = (_, layout) => callback(layout);
@@ -85,5 +88,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_, data) => callback(data);
     ipcRenderer.on('update-status-changed', handler);
     return () => ipcRenderer.removeListener('update-status-changed', handler);
+  },
+
+  // Update notes
+  onShowUpdateNotes: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('show-update-notes', handler);
+    return () => ipcRenderer.removeListener('show-update-notes', handler);
   },
 });

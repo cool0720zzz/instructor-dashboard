@@ -12,4 +12,6 @@ module.exports = {
   SET_UI_SETTINGS:        'set-ui-settings',
   OPEN_SEO_WINDOW:        'open-seo-window',
   CLOSE_SEO_WINDOW:       'close-seo-window',
+  SHOW_UPDATE_NOTES:      'show-update-notes',
+  RESIZE_TO_FIT:          'resize-to-fit',
 };

@@ -112,6 +112,17 @@ async function crawlNaverPlaceReviews(placeUrl) {
     console.error('[Crawler] Error:', err.message);
   }
 
+  // Also crawl booking (reservation) reviews — fails silently if no booking tab
+  try {
+    const bookingResult = await crawlBookingReviews(placeUrl);
+    if (bookingResult.reviews.length > 0) {
+      result.reviews.push(...bookingResult.reviews);
+      console.log(`[Crawler] Total with booking: ${result.reviews.length} reviews`);
+    }
+  } catch (err) {
+    console.warn(`[Crawler] Booking crawl skipped: ${err.message}`);
+  }
+
   return result;
 }
 
@@ -313,13 +324,15 @@ function _parseReviewsFromHtml($) {
  * Fetch reviews via mobile HTML page (fallback).
  * Parses Apollo state JSON embedded in script tags for VisitorReview objects.
  * @param {string} tab - 'visitor' or 'receipt'
+ * @param {string} [bizItemId] - optional booking item ID to filter reviews
  */
-async function _fetchReviewsViaHtml(placeId, tab = 'visitor') {
+async function _fetchReviewsViaHtml(placeId, tab = 'visitor', bizItemId = null) {
   const reviews = [];
 
   try {
     // Mobile page contains Apollo state JSON with full review data
-    const url = `https://m.place.naver.com/restaurant/${placeId}/review/${tab}?reviewSort=recent`;
+    let url = `https://m.place.naver.com/restaurant/${placeId}/review/${tab}?reviewSort=recent`;
+    if (bizItemId) url += `&bizItemId=${bizItemId}`;
     const html = await fetchHtml(url, { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' });
 
     const $ = cheerio.load(html);
@@ -609,12 +622,197 @@ async function _fetchNaverBlog(postUrl) {
   return data;
 }
 
+// ═══ Booking (Reservation) Review Crawling ═══
+
+/**
+ * Extract businessId from a Naver Place booking page.
+ * The booking page embeds businessId in script tags or Apollo state.
+ */
+async function _fetchBusinessId(placeId) {
+  try {
+    const url = `https://m.place.naver.com/restaurant/${placeId}/booking`;
+    const html = await fetchHtml(url, {
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+    });
+
+    // Look for businessId — bizes/ pattern is most reliable (excludes placeId)
+    const patterns = [
+      /bizes\/(\d+)/,
+      /bookingBusinessId["':=\s]+["']?(\d+)/,
+      /"businessId":"(\d+)"/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        console.log(`[Crawler] Found businessId: ${match[1]} for placeId: ${placeId}`);
+        return match[1];
+      }
+    }
+
+    console.log(`[Crawler] No businessId found for placeId: ${placeId} (no booking tab)`);
+    return null;
+  } catch (err) {
+    console.warn(`[Crawler] Failed to fetch businessId: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Fetch booking items (bizItems) via Naver Place GraphQL API.
+ * Returns array of { bizItemId, name, businessId }.
+ */
+async function _fetchBizItems(businessId) {
+  const query = `query bizItems($input: BizItemsParams) {
+  bizItems(input: $input) {
+    bizItemId
+    businessId
+    name
+    __typename
+  }
+}`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch('https://m.booking.naver.com/graphql', {
+      method: 'POST',
+      headers: {
+        ...HEADERS,
+        'Content-Type': 'application/json',
+        'Referer': 'https://m.place.naver.com/',
+      },
+      body: JSON.stringify({
+        operationName: 'bizItems',
+        query,
+        variables: {
+          input: { businessId, lang: 'ko', projections: 'RESOURCE' },
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    const items = data?.data?.bizItems || [];
+    console.log(`[Crawler] Found ${items.length} booking items for businessId: ${businessId}`);
+    return items.map(item => ({
+      bizItemId: item.bizItemId,
+      name: item.name,
+      businessId: item.businessId,
+    }));
+  } catch (err) {
+    console.warn(`[Crawler] Failed to fetch bizItems: ${err.message}`);
+    return [];
+  }
+}
+
+/**
+ * Fetch reviews for a specific booking item using the existing HTML parser.
+ * Reuses _fetchReviewsViaHtml with bizItemId filter parameter.
+ * Returns array of { text, date }.
+ */
+async function _fetchBookingItemReviews(placeId, bizItemId) {
+  try {
+    const reviews = await _fetchReviewsViaHtml(placeId, 'visitor', bizItemId);
+    return reviews || [];
+  } catch (err) {
+    console.warn(`[Crawler] Booking item review fetch failed (${bizItemId}): ${err.message}`);
+    return [];
+  }
+}
+
+/**
+ * Crawl booking (reservation) reviews from Naver Place.
+ * Matches booking items to instructors by name/keywords,
+ * then fetches reviews for each matched item.
+ */
+async function crawlBookingReviews(placeUrl) {
+  const result = { reviews: [], error: null };
+
+  if (!placeUrl) return result;
+
+  const placeId = extractPlaceId(placeUrl);
+  if (!placeId) return result;
+
+  const instructors = db.getAllInstructors();
+  if (instructors.length === 0) return result;
+
+  try {
+    // Step 1: Get businessId from booking page
+    const businessId = await _fetchBusinessId(placeId);
+    if (!businessId) {
+      console.log('[Crawler] No booking tab — skipping booking review crawl');
+      return result;
+    }
+
+    // Step 2: Get booking items
+    const bizItems = await _fetchBizItems(businessId);
+    if (bizItems.length === 0) return result;
+
+    // Step 3: Match booking items to instructors
+    const matchedItems = [];
+    for (const item of bizItems) {
+      const match = matchInstructor(item.name, instructors);
+      if (match) {
+        matchedItems.push({
+          ...item,
+          instructorId: match.instructor.id,
+          instructorName: match.instructor.name,
+          matchedKeyword: match.matchedKeyword,
+        });
+      }
+    }
+
+    console.log(`[Crawler] Matched ${matchedItems.length}/${bizItems.length} booking items to instructors`);
+    for (const m of matchedItems) {
+      console.log(`[Crawler]   ${m.name} → ${m.instructorName} (keyword: ${m.matchedKeyword})`);
+    }
+
+    // Step 4: Fetch reviews for each matched item
+    for (const item of matchedItems) {
+      const reviews = await _fetchBookingItemReviews(placeId, item.bizItemId);
+      console.log(`[Crawler] ${item.instructorName}: ${reviews.length} booking reviews`);
+
+      for (const raw of reviews) {
+        result.reviews.push({
+          text: raw.text,
+          date: raw.date,
+          matchedInstructorId: item.instructorId,
+          matchedKeyword: item.matchedKeyword,
+          source: 'booking',
+        });
+
+        // DB UNIQUE(review_text, review_date) handles dedup with visitor/receipt reviews
+        db.addReview({
+          review_text: raw.text,
+          review_date: raw.date,
+          matched_instructor_id: item.instructorId,
+        });
+      }
+
+      await delay(500 + Math.random() * 500);
+    }
+
+    console.log(`[Crawler] Booking total: ${result.reviews.length} reviews collected`);
+  } catch (err) {
+    result.error = err.message;
+    console.error('[Crawler] Booking crawl error:', err.message);
+  }
+
+  return result;
+}
+
 // No browser to close, but keep the export for compatibility
 async function closeBrowser() { /* noop */ }
 async function getBrowser() { return null; }
 
 module.exports = {
   crawlNaverPlaceReviews,
+  crawlBookingReviews,
   crawlBlogPost,
   closeBrowser,
   getBrowser,

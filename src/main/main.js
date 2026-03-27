@@ -326,6 +326,31 @@ app.whenReady().then(async () => {
     // Check for updates 5 seconds after launch (production only)
     setTimeout(() => autoUpdater.checkForUpdatesAndNotify(), 5000);
   }
+
+  // Open Coupang Partners link in default browser on app start
+  const { shell } = require('electron');
+  setTimeout(() => {
+    shell.openExternal('https://link.coupang.com/a/ecE8Wh');
+  }, 3000);
+
+  // Show update notes if version changed since last shown
+  win.webContents.once('did-finish-load', () => {
+    try {
+      const db = require('./data/db');
+      const { version } = require('../../package.json');
+      const lastShown = db.getSetting('last_shown_version');
+      if (lastShown !== version) {
+        const updateNotes = require('./updateNotes');
+        const notes = updateNotes[version];
+        if (notes && notes.length > 0) {
+          win.webContents.send('show-update-notes', { version, notes });
+        }
+        db.setSetting('last_shown_version', version);
+      }
+    } catch (err) {
+      console.warn('Update notes check failed:', err.message);
+    }
+  });
 });
 
 app.on('window-all-closed', () => {

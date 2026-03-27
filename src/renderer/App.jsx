@@ -3,6 +3,7 @@ import TitleBar from './components/TitleBar';
 import InstructorCard from './components/InstructorCard';
 import UiSettingsModal from './components/UiSettingsModal';
 import SeoPanel from './components/SeoPanel';
+import UpdateNotesModal from './components/UpdateNotesModal';
 import { useInstructors } from './hooks/useInstructors';
 import { useAlerts } from './hooks/useAlerts';
 
@@ -23,9 +24,25 @@ export default function App() {
 
 // ═══ SEO Floating Window ═══
 function SeoFloatingApp({ instructorId, seoResultId }) {
+  const handleClose = () => {
+    if (window.electronAPI?.closeSeoWindow) window.electronAPI.closeSeoWindow();
+  };
+
   return (
     <div className="h-screen bg-transparent overflow-auto">
       <div className="bg-gray-800/95 border border-gray-700/60 rounded-lg overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700/40">
+          <span className="text-gray-400 text-xs font-medium">SEO 분석</span>
+          <button
+            onClick={handleClose}
+            className="text-gray-500 hover:text-white transition-colors p-0.5 rounded hover:bg-gray-700/50"
+            title="닫기"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
         <SeoPanel instructorId={instructorId} seoResultId={seoResultId} />
       </div>
     </div>
@@ -78,9 +95,17 @@ function DashboardApp() {
   const [checkingLicense, setCheckingLicense] = useState(true);
   const [opacity, setOpacity] = useState(1.0);
   const [layout, setLayout] = useState('horizontal');
+  const [updateNotes, setUpdateNotes] = useState(null);
 
   const { instructors, loading, refresh } = useInstructors(licensed);
   const { alerts } = useAlerts(instructors);
+
+  // Auto-resize window to fit instructor cards
+  useEffect(() => {
+    if (!loading && instructors.length > 0 && window.electronAPI?.resizeToFit) {
+      window.electronAPI.resizeToFit(instructors.length);
+    }
+  }, [instructors.length, loading]);
 
   useEffect(() => {
     async function init() {
@@ -103,6 +128,16 @@ function DashboardApp() {
     if (window.electronAPI?.onLicenseActivated) {
       const unsub = window.electronAPI.onLicenseActivated(() => {
         setLicensed(true);
+      });
+      return unsub;
+    }
+  }, []);
+
+  // Listen for update notes
+  useEffect(() => {
+    if (window.electronAPI?.onShowUpdateNotes) {
+      const unsub = window.electronAPI.onShowUpdateNotes((data) => {
+        setUpdateNotes(data);
       });
       return unsub;
     }
@@ -200,6 +235,14 @@ function DashboardApp() {
           </div>
         )}
       </div>
+
+      {updateNotes && (
+        <UpdateNotesModal
+          version={updateNotes.version}
+          notes={updateNotes.notes}
+          onClose={() => setUpdateNotes(null)}
+        />
+      )}
     </div>
   );
 }

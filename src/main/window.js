@@ -1,29 +1,17 @@
-const { BrowserWindow, BrowserView, screen, ipcMain, shell, session } = require('electron');
+const { BrowserWindow, screen, ipcMain, shell } = require('electron');
 const path = require('path');
 const channels = require('../../shared/ipc-channels');
 
 let mainWindow = null;
-let bannerView = null;
 let seoWindow = null;
 let settingsWindow = null;
 let currentSnapPosition = null;
 
 const isDev = !require('electron').app.isPackaged;
 
-const BANNER_HEIGHT = 70;
-const COUPANG_URL = 'https://ads-partners.coupang.com/widgets.html?id=972878&template=carousel&trackingCode=AF1751405&subId=FCwidget&width=680&height=70';
-
 // ═══ Main Window ═══
 
 function createMainWindow() {
-  // Strip CSP headers so Coupang scripts/images can load in the BrowserView
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const headers = { ...details.responseHeaders };
-    delete headers['content-security-policy'];
-    delete headers['Content-Security-Policy'];
-    callback({ responseHeaders: headers });
-  });
-
   mainWindow = new BrowserWindow({
     icon: path.join(__dirname, '../../assets/icon.png'),
     transparent: false,
@@ -31,9 +19,9 @@ function createMainWindow() {
     alwaysOnTop: false,
     skipTaskbar: false,
     width: 960,
-    height: 260 + BANNER_HEIGHT,
+    height: 260,
     minWidth: 400,
-    minHeight: 180 + BANNER_HEIGHT,
+    minHeight: 180,
     resizable: true,
     backgroundColor: '#111827',
     webPreferences: {
@@ -46,20 +34,46 @@ function createMainWindow() {
 
   mainWindow.setOpacity(1.0);
 
-  // Update banner bounds when window resizes
-  mainWindow.on('resize', () => {
-    _syncBannerBounds();
+  // ─── Edge magnet snap while dragging ───
+  let _isSnapping = false;
+  mainWindow.on('move', () => {
+    if (_isSnapping) return;
+    const SNAP_THRESHOLD = 20;
+    const bounds = mainWindow.getBounds();
+    const area = screen.getPrimaryDisplay().workArea;
+
+    let snapped = false;
+    // Left edge
+    if (Math.abs(bounds.x - area.x) < SNAP_THRESHOLD && bounds.x !== area.x) {
+      bounds.x = area.x; snapped = true;
+    }
+    // Top edge
+    if (Math.abs(bounds.y - area.y) < SNAP_THRESHOLD && bounds.y !== area.y) {
+      bounds.y = area.y; snapped = true;
+    }
+    // Right edge
+    const rightGap = (area.x + area.width) - (bounds.x + bounds.width);
+    if (Math.abs(rightGap) < SNAP_THRESHOLD && rightGap !== 0) {
+      bounds.x = area.x + area.width - bounds.width; snapped = true;
+    }
+    // Bottom edge
+    const bottomGap = (area.y + area.height) - (bounds.y + bounds.height);
+    if (Math.abs(bottomGap) < SNAP_THRESHOLD && bottomGap !== 0) {
+      bounds.y = area.y + area.height - bounds.height; snapped = true;
+    }
+
+    if (snapped) {
+      _isSnapping = true;
+      mainWindow.setBounds(bounds);
+      setTimeout(() => { _isSnapping = false; }, 50);
+    }
   });
 
   mainWindow.on('closed', () => {
-    bannerView = null;
     mainWindow = null;
     closeSeoWindow();
     closeSettingsWindow();
   });
-
-  // Attach banner view
-  _createBannerView();
 
   return mainWindow;
 }
@@ -68,51 +82,25 @@ function getMainWindow() {
   return mainWindow;
 }
 
-// ═══ Banner BrowserView ═══
+// ═══ Auto-resize to fit instructor cards ═══
 
-function _createBannerView() {
-  if (!mainWindow) return;
+function resizeToFitInstructors(count) {
+  if (!mainWindow || count <= 0) return;
 
-  bannerView = new BrowserView({
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true,
-    },
-  });
+  const display = screen.getPrimaryDisplay();
+  const { width: screenW } = display.workAreaSize;
 
-  mainWindow.addBrowserView(bannerView);
-  _syncBannerBounds();
+  // Card: 220px wide, gap: 12px, padding: 12px each side
+  const CARD_W = 220;
+  const GAP = 12;
+  const PAD = 12;
+  const targetWidth = PAD + (CARD_W * count) + (GAP * (count - 1)) + PAD;
 
-  bannerView.webContents.loadURL(COUPANG_URL);
+  const width = Math.max(400, Math.min(targetWidth, screenW));
+  const height = 260;
 
-  // Open all links in default system browser, not inside Electron
-  bannerView.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  bannerView.webContents.on('will-navigate', (event, url) => {
-    // Allow the initial coupang widget URL to load
-    if (url.includes('ads-partners.coupang.com/widgets')) return;
-    event.preventDefault();
-    shell.openExternal(url);
-  });
-
-  // Set dark background while loading
-  bannerView.setBackgroundColor('#0d1b2a');
-}
-
-function _syncBannerBounds() {
-  if (!mainWindow || !bannerView) return;
-  const { width, height } = mainWindow.getContentBounds();
-  bannerView.setBounds({
-    x: 0,
-    y: height - BANNER_HEIGHT,
-    width,
-    height: BANNER_HEIGHT,
-  });
+  const bounds = mainWindow.getBounds();
+  mainWindow.setBounds({ x: bounds.x, y: bounds.y, width, height }, true);
 }
 
 // ═══ Snap ═══
@@ -123,9 +111,9 @@ function createSnapBounds(position) {
   const { x: ox, y: oy } = display.workArea;
 
   const presets = {
-    top:    { x: ox, y: oy, width, height: 260 + BANNER_HEIGHT },
+    top:    { x: ox, y: oy, width, height: 260 },
     right:  { x: ox + width - 400, y: oy, width: 400, height },
-    bottom: { x: ox, y: oy + height - 180 - BANNER_HEIGHT, width, height: 180 + BANNER_HEIGHT },
+    bottom: { x: ox, y: oy + height - 180, width, height: 180 },
   };
 
   return presets[position] || null;
@@ -179,10 +167,6 @@ function openSeoWindow({ x, y, width, instructorId, seoResultId }) {
       { hash }
     );
   }
-
-  seoWindow.on('blur', () => {
-    closeSeoWindow();
-  });
 
   seoWindow.on('closed', () => {
     seoWindow = null;
@@ -329,11 +313,17 @@ function registerWindowIpc() {
   ipcMain.handle('open-external', (_, url) => {
     shell.openExternal(url);
   });
+
+  // Auto-resize to fit instructor cards
+  ipcMain.handle(channels.RESIZE_TO_FIT, (_, count) => {
+    resizeToFitInstructors(count);
+  });
 }
 
 module.exports = {
   createMainWindow,
   getMainWindow,
+  resizeToFitInstructors,
   createSnapBounds,
   snapWindow,
   openSeoWindow,
