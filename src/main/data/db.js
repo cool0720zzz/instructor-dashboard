@@ -290,8 +290,10 @@ function getAvgSeoScore(instructorId, weekStart, weekEnd) {
 // ─── Reviews ────────────────────────────────────────────────────────────────
 
 function addReview(data) {
-  return _run(`INSERT OR IGNORE INTO reviews (review_text, review_date, matched_instructor_id)
-               VALUES (?, ?, ?)`,
+  return _run(`INSERT INTO reviews (review_text, review_date, matched_instructor_id)
+               VALUES (?, ?, ?)
+               ON CONFLICT(review_text, review_date) DO UPDATE SET
+               matched_instructor_id = COALESCE(excluded.matched_instructor_id, reviews.matched_instructor_id)`,
     [data.review_text, data.review_date || new Date().toISOString(), data.matched_instructor_id || null]);
 }
 
