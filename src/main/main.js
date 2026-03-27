@@ -388,6 +388,16 @@ app.whenReady().then(async () => {
     // default 100%
   }
 
+  // Enable auto-start by default (if not explicitly set)
+  try {
+    const db = require('./data/db');
+    const autoStartSetting = db.getSetting('auto_start');
+    if (autoStartSetting === null || autoStartSetting === undefined) {
+      db.setSetting('auto_start', 'true');
+      app.setLoginItemSettings({ openAtLogin: true });
+    }
+  } catch {}
+
   // Start scheduler (will run initial collection if instructors exist)
   try {
     const db = require('./data/db');
