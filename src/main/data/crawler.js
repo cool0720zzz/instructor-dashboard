@@ -4,6 +4,9 @@ const cheerio = require('cheerio');
 const db = require('./db');
 const { matchInstructor, extractBlogContent } = require('./parser');
 
+// Safe console.log that ignores EPIPE errors (broken pipe when dev process exits)
+const _log = (...args) => { try { console.log(...args); } catch {} };
+
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
@@ -60,7 +63,7 @@ async function crawlNaverPlaceReviews(placeUrl) {
     return result;
   }
 
-  console.log(`[Crawler] Fetching reviews for place ${placeId} (visitor + receipt)`);
+  _log(`[Crawler] Fetching reviews for place ${placeId} (visitor + receipt)`);
 
   try {
     // Fetch both visitor and receipt reviews in parallel
@@ -69,7 +72,7 @@ async function crawlNaverPlaceReviews(placeUrl) {
       _fetchReviewsForTab(placeId, 'receipt'),
     ]);
 
-    console.log(`[Crawler] visitor: ${visitorReviews.length}, receipt: ${receiptReviews.length}`);
+    _log(`[Crawler] visitor: ${visitorReviews.length}, receipt: ${receiptReviews.length}`);
 
     // Combine and deduplicate by review text
     const seen = new Set();
@@ -82,7 +85,7 @@ async function crawlNaverPlaceReviews(placeUrl) {
       }
     }
 
-    console.log(`[Crawler] ${allReviews.length} unique reviews, matching against ${instructors.length} instructors`);
+    _log(`[Crawler] ${allReviews.length} unique reviews, matching against ${instructors.length} instructors`);
 
     for (const raw of allReviews) {
       const match = matchInstructor(raw.text, instructors);
@@ -102,10 +105,10 @@ async function crawlNaverPlaceReviews(placeUrl) {
     }
 
     const matched = result.reviews.filter(r => r.matchedInstructorId);
-    console.log(`[Crawler] ${matched.length}/${result.reviews.length} reviews matched`);
+    _log(`[Crawler] ${matched.length}/${result.reviews.length} reviews matched`);
     for (const inst of instructors) {
       const count = matched.filter(r => r.matchedInstructorId === inst.id).length;
-      if (count > 0) console.log(`[Crawler]   ${inst.name}: ${count} reviews`);
+      if (count > 0) _log(`[Crawler]   ${inst.name}: ${count} reviews`);
     }
   } catch (err) {
     result.error = err.message;
@@ -117,7 +120,7 @@ async function crawlNaverPlaceReviews(placeUrl) {
     const bookingResult = await crawlBookingReviews(placeUrl);
     if (bookingResult.reviews.length > 0) {
       result.reviews.push(...bookingResult.reviews);
-      console.log(`[Crawler] Total with booking: ${result.reviews.length} reviews`);
+      _log(`[Crawler] Total with booking: ${result.reviews.length} reviews`);
     }
   } catch (err) {
     console.warn(`[Crawler] Booking crawl skipped: ${err.message}`);
@@ -136,9 +139,9 @@ async function _fetchReviewsForTab(placeId, tab) {
     // The PC API (_fetchReviewsViaApi) often returns reviews without dates,
     // causing all reviews to fallback to today's date.
     const reviews = await _fetchReviewsViaHtml(placeId, tab);
-    console.log(`[Crawler] _fetchReviewsViaHtml(${tab}): ${reviews ? reviews.length + ' reviews' : 'empty'}`);
+    _log(`[Crawler] _fetchReviewsViaHtml(${tab}): ${reviews ? reviews.length + ' reviews' : 'empty'}`);
     if (reviews && reviews.length > 0) {
-      console.log(`[Crawler] dates sample:`, reviews.slice(0, 3).map(r => r.date));
+      _log(`[Crawler] dates sample:`, reviews.slice(0, 3).map(r => r.date));
     }
     return reviews || [];
   } catch (err) {
@@ -645,12 +648,12 @@ async function _fetchBusinessId(placeId) {
     for (const pattern of patterns) {
       const match = html.match(pattern);
       if (match) {
-        console.log(`[Crawler] Found businessId: ${match[1]} for placeId: ${placeId}`);
+        _log(`[Crawler] Found businessId: ${match[1]} for placeId: ${placeId}`);
         return match[1];
       }
     }
 
-    console.log(`[Crawler] No businessId found for placeId: ${placeId} (no booking tab)`);
+    _log(`[Crawler] No businessId found for placeId: ${placeId} (no booking tab)`);
     return null;
   } catch (err) {
     console.warn(`[Crawler] Failed to fetch businessId: ${err.message}`);
@@ -698,7 +701,7 @@ async function _fetchBizItems(businessId) {
 
     const data = await res.json();
     const items = data?.data?.bizItems || [];
-    console.log(`[Crawler] Found ${items.length} booking items for businessId: ${businessId}`);
+    _log(`[Crawler] Found ${items.length} booking items for businessId: ${businessId}`);
     return items.map(item => ({
       bizItemId: item.bizItemId,
       name: item.name,
@@ -767,15 +770,15 @@ async function crawlBookingReviews(placeUrl) {
       }
     }
 
-    console.log(`[Crawler] Matched ${matchedItems.length}/${bizItems.length} booking items to instructors`);
+    _log(`[Crawler] Matched ${matchedItems.length}/${bizItems.length} booking items to instructors`);
     for (const m of matchedItems) {
-      console.log(`[Crawler]   ${m.name} → ${m.instructorName} (keyword: ${m.matchedKeyword})`);
+      _log(`[Crawler]   ${m.name} → ${m.instructorName} (keyword: ${m.matchedKeyword})`);
     }
 
     // Step 4: Fetch reviews for each matched item
     for (const item of matchedItems) {
       const reviews = await _fetchBookingItemReviews(placeId, item.bizItemId);
-      console.log(`[Crawler] ${item.instructorName}: ${reviews.length} booking reviews`);
+      _log(`[Crawler] ${item.instructorName}: ${reviews.length} booking reviews`);
 
       for (const raw of reviews) {
         result.reviews.push({
@@ -797,7 +800,7 @@ async function crawlBookingReviews(placeUrl) {
       await delay(500 + Math.random() * 500);
     }
 
-    console.log(`[Crawler] Booking total: ${result.reviews.length} reviews collected`);
+    _log(`[Crawler] Booking total: ${result.reviews.length} reviews collected`);
   } catch (err) {
     result.error = err.message;
     console.error('[Crawler] Booking crawl error:', err.message);
