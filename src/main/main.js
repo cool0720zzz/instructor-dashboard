@@ -243,6 +243,88 @@ function registerDataIpcHandlers() {
     }
   });
 
+  // ─── Re-registration tracker ───
+  ipcMain.handle(channels.SELECT_REREG_FILE, async () => {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'Excel', extensions: ['xlsx', 'xls', 'csv'] }],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle(channels.GET_REREG_SHEET_NAMES, async (_, filePath) => {
+    try {
+      const rereg = require('./data/reregistration');
+      return { sheets: rereg.getSheetNames(filePath) };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle(channels.GET_REREG_PREVIEW, async (_, config) => {
+    try {
+      const rereg = require('./data/reregistration');
+      if (config.sourceType === 'googleSheet') {
+        const rows = await rereg.fetchGoogleSheet(config.sheetUrl);
+        return { rows: rows.slice(0, 15) };
+      } else {
+        const rows = rereg.getPreviewRows(config.filePath, config.sheetName, 15);
+        return { rows };
+      }
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle(channels.PARSE_REREG_DATA, async (_, config) => {
+    try {
+      const rereg = require('./data/reregistration');
+      let records;
+      if (config.sourceType === 'googleSheet') {
+        const rawRows = await rereg.fetchGoogleSheet(config.sheetUrl);
+        const dataRows = rawRows.slice(config.startRow || 1);
+        records = rereg.mapRowsToRecords(dataRows, config.columns);
+      } else {
+        records = rereg.parseExcelWithMapping(config.filePath, config.sheetName, config.columns, config.startRow);
+      }
+      records = rereg.verifyCohortReRegistrations(records);
+      return { data: records };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle(channels.GET_REREG_CONFIG, () => {
+    try {
+      const db = require('./data/db');
+      const raw = db.getSetting('rereg_config');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle(channels.SET_REREG_CONFIG, (_, config) => {
+    try {
+      const db = require('./data/db');
+      db.setSetting('rereg_config', JSON.stringify(config));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle(channels.FETCH_GOOGLE_SHEET, async (_, url) => {
+    try {
+      const rereg = require('./data/reregistration');
+      const rows = await rereg.fetchGoogleSheet(url);
+      return { rows: rows.slice(0, 15) };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   ipcMain.handle(channels.SET_UI_SETTINGS, (_, settings) => {
     try {
       const db = require('./data/db');

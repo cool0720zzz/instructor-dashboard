@@ -90,6 +90,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('update-status-changed', handler);
   },
 
+  // Re-registration tracker
+  selectReregFile: () => ipcRenderer.invoke(channels.SELECT_REREG_FILE),
+  parseReregData: (config) => ipcRenderer.invoke(channels.PARSE_REREG_DATA, config),
+  getReregStats: (filter) => ipcRenderer.invoke(channels.GET_REREG_STATS, filter),
+  getReregConfig: () => ipcRenderer.invoke(channels.GET_REREG_CONFIG),
+  setReregConfig: (config) => ipcRenderer.invoke(channels.SET_REREG_CONFIG, config),
+  fetchGoogleSheet: (url) => ipcRenderer.invoke(channels.FETCH_GOOGLE_SHEET, url),
+  getReregSheetNames: (filePath) => ipcRenderer.invoke(channels.GET_REREG_SHEET_NAMES, filePath),
+  getReregPreview: (config) => ipcRenderer.invoke(channels.GET_REREG_PREVIEW, config),
+
   // Update notes
   onShowUpdateNotes: (callback) => {
     const handler = (_, data) => callback(data);

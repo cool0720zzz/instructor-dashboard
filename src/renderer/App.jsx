@@ -4,6 +4,7 @@ import InstructorCard from './components/InstructorCard';
 import UiSettingsModal from './components/UiSettingsModal';
 import SeoPanel from './components/SeoPanel';
 import UpdateNotesModal from './components/UpdateNotesModal';
+import ReRegistrationPanel from './components/ReRegistrationPanel';
 import { useInstructors } from './hooks/useInstructors';
 import { useAlerts } from './hooks/useAlerts';
 
@@ -96,6 +97,7 @@ function DashboardApp() {
   const [opacity, setOpacity] = useState(1.0);
   const [layout, setLayout] = useState('horizontal');
   const [updateNotes, setUpdateNotes] = useState(null);
+  const [activeTab, setActiveTab] = useState('activity'); // 'activity' | 'rereg'
 
   const { instructors, loading, refresh } = useInstructors(licensed);
   const { alerts } = useAlerts(instructors);
@@ -214,8 +216,34 @@ function DashboardApp() {
         onLayoutChange={setLayout}
       />
 
+      {/* Tab switcher */}
+      <div className="flex items-center gap-1 px-3 pt-1">
+        <button
+          onClick={() => setActiveTab('activity')}
+          className={`px-3 py-1 text-xs font-medium rounded-t transition-colors ${
+            activeTab === 'activity'
+              ? 'bg-gray-800 text-white border-b-2 border-blue-500'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          활동
+        </button>
+        <button
+          onClick={() => setActiveTab('rereg')}
+          className={`px-3 py-1 text-xs font-medium rounded-t transition-colors ${
+            activeTab === 'rereg'
+              ? 'bg-gray-800 text-white border-b-2 border-blue-500'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          재등록
+        </button>
+      </div>
+
       <div className="flex-1 overflow-auto px-3 pb-3">
-        {loading ? (
+        {activeTab === 'rereg' ? (
+          <ReRegistrationPanel />
+        ) : loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-gray-400 text-sm">데이터 로딩 중...</div>
           </div>

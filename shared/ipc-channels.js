@@ -14,4 +14,14 @@ module.exports = {
   CLOSE_SEO_WINDOW:       'close-seo-window',
   SHOW_UPDATE_NOTES:      'show-update-notes',
   RESIZE_TO_FIT:          'resize-to-fit',
+
+  // Re-registration tracker
+  SELECT_REREG_FILE:      'select-rereg-file',
+  PARSE_REREG_DATA:       'parse-rereg-data',
+  GET_REREG_STATS:        'get-rereg-stats',
+  GET_REREG_CONFIG:       'get-rereg-config',
+  SET_REREG_CONFIG:        'set-rereg-config',
+  FETCH_GOOGLE_SHEET:     'fetch-google-sheet',
+  GET_REREG_SHEET_NAMES:  'get-rereg-sheet-names',
+  GET_REREG_PREVIEW:      'get-rereg-preview',
 };
