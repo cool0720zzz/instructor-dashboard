@@ -5,7 +5,7 @@ export default function UpdateNotesModal({ version, notes, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-80 max-h-[80vh] overflow-hidden">
+      <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-80 max-h-[80vh] overflow-y-auto">
         {/* Header */}
         <div className="px-5 pt-4 pb-3">
           <div className="flex items-center justify-between">
