@@ -1,6 +1,6 @@
 {
   "name": "lino-manager",
-  "version": "1.0.13",
+  "version": "1.1.0",
   "description": "LINO매니저",
   "main": "src/main/main.js",
   "scripts": {
