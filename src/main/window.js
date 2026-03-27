@@ -19,7 +19,7 @@ function createMainWindow() {
     alwaysOnTop: false,
     skipTaskbar: false,
     width: 960,
-    height: 260,
+    height: 340,
     minWidth: 400,
     minHeight: 180,
     resizable: true,
@@ -97,7 +97,7 @@ function resizeToFitInstructors(count) {
   const targetWidth = PAD + (CARD_W * count) + (GAP * (count - 1)) + PAD;
 
   const width = Math.max(400, Math.min(targetWidth, screenW));
-  const height = 260;
+  const height = 340;
 
   const bounds = mainWindow.getBounds();
   mainWindow.setBounds({ x: bounds.x, y: bounds.y, width, height }, true);
