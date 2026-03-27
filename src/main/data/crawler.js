@@ -666,11 +666,15 @@ async function _fetchBusinessId(placeId) {
  * Returns array of { bizItemId, name, businessId }.
  */
 async function _fetchBizItems(businessId) {
-  const query = `query bizItems($input: BizItemsParams) {
+  const query = `query bizItems($input: BizItemsParams, $withReviewStat: Boolean = false) {
   bizItems(input: $input) {
     bizItemId
     businessId
     name
+    reviewStatDetails @include(if: $withReviewStat) {
+      totalCount
+      avgRating
+    }
     __typename
   }
 }`;
@@ -691,6 +695,7 @@ async function _fetchBizItems(businessId) {
         query,
         variables: {
           input: { businessId, lang: 'ko', projections: 'RESOURCE' },
+          withReviewStat: true,
         },
       }),
       signal: controller.signal,
@@ -706,6 +711,7 @@ async function _fetchBizItems(businessId) {
       bizItemId: item.bizItemId,
       name: item.name,
       businessId: item.businessId,
+      reviewCount: item.reviewStatDetails?.totalCount || 0,
     }));
   } catch (err) {
     console.warn(`[Crawler] Failed to fetch bizItems: ${err.message}`);
@@ -718,75 +724,145 @@ async function _fetchBizItems(businessId) {
  * Uses the Naver Place review GraphQL endpoint with bizItemId filter.
  * Returns array of { text, date }.
  */
-async function _fetchBookingItemReviews(placeId, bizItemId, businessId) {
-  const query = `query {
-  review(input: {
-    businessId: "${businessId}"
-    bizItemId: "${bizItemId}"
-    bizItemType: "STANDARD"
-    item: "0"
-    bookingBusinessId: "${businessId}"
-    startFrom: 1
-    size: 10
-    isPhotoUsed: false
-    includeContent: true
-    getUserStats: true
-    includeReceiptPhotos: true
-    getReplyPhotos: true
-    sort: "visitDateTime.desc"
-  }) {
-    reviews {
-      id
-      body
-      completedDateTime
-      visit {
-        visitDateTime
-      }
-    }
-  }
-}`;
+/**
+ * Fetch ALL receipt reviews with booking item info from Apollo state.
+ * Returns array of { text, date, bizItemId, bizItemName }.
+ */
+async function _fetchReceiptReviewsWithBookingInfo(placeId) {
+  const reviews = [];
+  try {
+    const url = `https://m.place.naver.com/restaurant/${placeId}/review/receipt?reviewSort=recent`;
+    const html = await fetchHtml(url, {
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+    });
+    const $ = cheerio.load(html);
 
+    $('script').each((_, script) => {
+      if (reviews.length > 0) return;
+      const content = $(script).html() || '';
+      if (!content.includes('"body"') || content.length < 5000) return;
+
+      try {
+        // Find VisitorReview objects and extract body + visit items
+        const vrKeyRegex = /"VisitorReview:([a-f0-9]+):true":\{/g;
+        const seen = new Set();
+        let keyMatch;
+
+        while ((keyMatch = vrKeyRegex.exec(content)) !== null) {
+          const reviewId = keyMatch[1];
+          const startIdx = keyMatch.index + keyMatch[0].length;
+          const chunk = content.substring(startIdx, startIdx + 3000);
+
+          if (!chunk.includes('"__typename":"VisitorReview"')) continue;
+
+          // Extract body
+          const bodyMatch = chunk.match(/"body":"((?:[^"\\]|\\.)*)"/);
+          if (!bodyMatch) continue;
+          const text = bodyMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\u002F/g, '/');
+          if (text.length < 5) continue;
+
+          const dedupeKey = text.substring(0, 50);
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
+
+          // Extract date
+          let dateStr = '';
+          const createdMatch = chunk.match(/"created":"([^"]+)"/);
+          if (createdMatch) dateStr = _parseNaverShortDate(createdMatch[1]);
+          if (!dateStr) {
+            const visitedMatch = chunk.match(/"visited":"([^"]+)"/);
+            if (visitedMatch) dateStr = _parseNaverShortDate(visitedMatch[1]);
+          }
+          if (!dateStr) dateStr = new Date().toISOString().slice(0, 10);
+
+          // Try to find the associated Visit object with booking item info
+          // Look for Visit:<id> that references this review
+          let bizItemId = null;
+          let bizItemName = null;
+
+          // Search for the visit reference in the same review chunk
+          // The visit object has "items" which contains the booking item
+          const visitRef = content.match(new RegExp(`"Visit:[^"]*":\\{[^}]*"reviewGroupId":"${reviewId}"[^}]*\\}`));
+          if (visitRef) {
+            const visitChunk = content.substring(visitRef.index, visitRef.index + 2000);
+            const itemIdMatch = visitChunk.match(/"items":\[\{"id":"(\d+)"/);
+            if (itemIdMatch) bizItemId = itemIdMatch[1];
+            const itemNameMatch = visitChunk.match(/"items":\[\{[^}]*"name":"((?:[^"\\]|\\.)*)"/);
+            if (itemNameMatch) bizItemName = itemNameMatch[1].replace(/\\"/g, '"');
+          }
+
+          // Alternative: look for bookingItemId pattern near the review
+          if (!bizItemId) {
+            const nearbyContent = content.substring(Math.max(0, keyMatch.index - 2000), startIdx + 3000);
+            const bizMatch = nearbyContent.match(/"bizItemId":"(\d+)"/);
+            if (bizMatch) bizItemId = bizMatch[1];
+          }
+
+          reviews.push({ text, date: dateStr, bizItemId, bizItemName });
+        }
+      } catch { /* parse error */ }
+    });
+  } catch (err) {
+    console.error(`[Crawler] Receipt reviews with booking info failed: ${err.message}`);
+  }
+  return reviews;
+}
+
+async function _fetchBookingItemReviews(placeId, bizItemId, businessId, size = 50) {
+  // Fallback: try Node.js fetch with correct ReviewParams format
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await fetch('https://pcmap-api.place.naver.com/graphql', {
+    const res = await fetch(`https://m.booking.naver.com/graphql?opName=review`, {
       method: 'POST',
       headers: {
-        ...HEADERS,
         'Content-Type': 'application/json',
-        'Referer': `https://m.place.naver.com/restaurant/${placeId}/booking`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://m.booking.naver.com/',
+        'Origin': 'https://m.booking.naver.com',
       },
       body: JSON.stringify({
-        operationName: null,
-        query,
-        variables: {},
+        operationName: 'review',
+        variables: {
+          reviewParams: {
+            businessId: String(businessId),
+            bizItemId: String(bizItemId),
+            bizItemType: 'STANDARD',
+            size,
+            isProgramBizItem: false,
+          },
+        },
+        query: 'query review($reviewParams: ReviewParams) { review(input: $reviewParams) { id reviewCount totalCount reviews { id body completedDateTime useDate visit __typename } __typename } }',
       }),
       signal: controller.signal,
     });
 
     clearTimeout(timeout);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      _log(`[Crawler] Node.js GraphQL returned ${res.status} for ${bizItemId}`);
+      return [];
+    }
 
     const data = await res.json();
-    const reviews = data?.data?.review?.reviews || [];
+    if (data.errors) {
+      _log(`[Crawler] GraphQL errors for ${bizItemId}: ${JSON.stringify(data.errors[0]?.message || '').substring(0, 100)}`);
+      return [];
+    }
 
+    const reviews = data?.data?.review?.reviews || [];
     return reviews.map(r => {
+      const visit = typeof r.visit === 'string' ? JSON.parse(r.visit) : r.visit;
+      const dateStr = visit?.visitDateTime || r.completedDateTime || r.useDate;
       let date = null;
-      const dateStr = r.visit?.visitDateTime || r.completedDateTime;
       if (dateStr) {
         const d = new Date(dateStr);
-        if (!isNaN(d.getTime())) {
-          date = d.toISOString().split('T')[0];
-        }
+        if (!isNaN(d.getTime())) date = d.toISOString().split('T')[0];
       }
-      return {
-        text: (r.body || '').trim(),
-        date: date || new Date().toISOString().split('T')[0],
-      };
+      return { text: (r.body || '').trim(), date: date || new Date().toISOString().split('T')[0] };
     }).filter(r => r.text);
   } catch (err) {
-    console.warn(`[Crawler] Booking item review fetch failed (${bizItemId}): ${err.message}`);
+    _log(`[Crawler] Node.js booking review fetch failed (${bizItemId}): ${err.message}`);
     return [];
   }
 }
@@ -838,29 +914,32 @@ async function crawlBookingReviews(placeUrl) {
       _log(`[Crawler]   ${m.name} → ${m.instructorName} (keyword: ${m.matchedKeyword})`);
     }
 
-    // Step 4: Fetch reviews for each matched item
+    // Step 4: Use Electron BrowserWindow to fetch reviews via GraphQL (with real browser cookies)
+    _log(`[Crawler] Fetching booking reviews via Electron headless browser...`);
+
     for (const item of matchedItems) {
-      const reviews = await _fetchBookingItemReviews(placeId, item.bizItemId, item.businessId);
-      _log(`[Crawler] ${item.instructorName}: ${reviews.length} booking reviews`);
+      try {
+        const reviews = await _fetchBookingReviewsViaElectron(placeId, item.bizItemId, item.businessId);
+        _log(`[Crawler] ${item.instructorName}: ${reviews.length} booking reviews (Electron)`);
 
-      for (const raw of reviews) {
-        result.reviews.push({
-          text: raw.text,
-          date: raw.date,
-          matchedInstructorId: item.instructorId,
-          matchedKeyword: item.matchedKeyword,
-          source: 'booking',
-        });
-
-        // DB UNIQUE(review_text, review_date) handles dedup with visitor/receipt reviews
-        db.addReview({
-          review_text: raw.text,
-          review_date: raw.date,
-          matched_instructor_id: item.instructorId,
-        });
+        for (const raw of reviews) {
+          result.reviews.push({
+            text: raw.text, date: raw.date,
+            matchedInstructorId: item.instructorId,
+            matchedKeyword: item.matchedKeyword,
+            source: 'booking',
+          });
+          db.addReview({
+            review_text: raw.text,
+            review_date: raw.date,
+            matched_instructor_id: item.instructorId,
+          });
+        }
+      } catch (err) {
+        _log(`[Crawler] ${item.instructorName} Electron fetch error: ${err.message}`);
       }
 
-      await delay(500 + Math.random() * 500);
+      await delay(300 + Math.random() * 300);
     }
 
     _log(`[Crawler] Booking total: ${result.reviews.length} reviews collected`);
@@ -870,6 +949,131 @@ async function crawlBookingReviews(placeUrl) {
   }
 
   return result;
+}
+
+/**
+ * Fetch booking item reviews using Electron's hidden BrowserWindow.
+ * This gives us real Chromium cookies/session so the GraphQL API works.
+ */
+async function _fetchBookingReviewsViaElectron(placeId, bizItemId, businessId) {
+  const { BrowserWindow } = require('electron');
+
+  return new Promise((resolve) => {
+    let win = null;
+    const timeout = setTimeout(() => {
+      if (win && !win.isDestroyed()) win.close();
+      resolve([]);
+    }, 30000);
+
+    try {
+      win = new BrowserWindow({
+        show: false,
+        width: 800,
+        height: 600,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          webSecurity: false, // Disable CORS for headless GraphQL requests
+        },
+      });
+
+      // Navigate to m.booking.naver.com (same origin as the GraphQL API)
+      const placeUrl = `https://m.booking.naver.com/booking/12/bizes/${businessId}/items/${bizItemId}`;
+
+      win.webContents.on('did-finish-load', async () => {
+        try {
+          // Execute GraphQL fetch from within the browser context (has cookies)
+          const reviewData = await win.webContents.executeJavaScript(`
+            (async () => {
+              try {
+                const res = await fetch('https://m.booking.naver.com/graphql?opName=review', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    operationName: 'review',
+                    variables: {
+                      reviewParams: {
+                        businessId: '${businessId}',
+                        bizItemId: '${bizItemId}',
+                        bizItemType: 'STANDARD',
+                        size: 50,
+                        isProgramBizItem: false,
+                      },
+                    },
+                    query: 'query review($reviewParams: ReviewParams) { review(input: $reviewParams) { id reviewCount totalCount reviews { id body completedDateTime useDate visit __typename } __typename } }',
+                  }),
+                });
+
+                if (!res.ok) {
+                  const text = await res.text().catch(() => '');
+                  return { error: 'HTTP ' + res.status, body: text.substring(0, 500) };
+                }
+                const data = await res.json();
+                if (data.errors) return { error: JSON.stringify(data.errors[0]) };
+                return data;
+              } catch (e) {
+                return { error: e.message };
+              }
+            })()
+          `);
+
+          clearTimeout(timeout);
+          if (win && !win.isDestroyed()) win.close();
+
+          if (reviewData?.error) {
+            _log(`[Crawler] Electron GraphQL error for ${bizItemId}: ${reviewData.error}${reviewData.body ? ' | Body: ' + reviewData.body.substring(0, 200) : ''}`);
+            resolve([]);
+            return;
+          }
+
+          const reviews = reviewData?.data?.review?.reviews || [];
+          // Debug: log first review structure to understand fields
+          if (reviews.length > 0) {
+            _log('[Crawler] Sample review keys: ' + Object.keys(reviews[0]).join(', '));
+            _log('[Crawler] Sample review dates: completedDateTime=' + reviews[0].completedDateTime + ' useDate=' + reviews[0].useDate + ' visit=' + JSON.stringify(reviews[0].visit)?.substring(0, 200));
+          }
+          const parsed = reviews.map(r => {
+            // visit is JSON type, may be object or string
+            let visit = null;
+            try { visit = typeof r.visit === 'string' ? JSON.parse(r.visit) : r.visit; } catch {}
+            const dateStr = visit?.visitDateTime || r.completedDateTime || r.useDate;
+            let date = null;
+            if (dateStr) {
+              const d = new Date(dateStr);
+              if (!isNaN(d.getTime())) date = d.toISOString().split('T')[0];
+            }
+            if (!date) _log('[Crawler] WARNING: no date for review: ' + (r.body || '').substring(0, 30));
+            return {
+              text: (r.body || '').trim(),
+              date: date || new Date().toISOString().split('T')[0],
+            };
+          }).filter(r => r.text);
+
+          resolve(parsed);
+        } catch (err) {
+          clearTimeout(timeout);
+          if (win && !win.isDestroyed()) win.close();
+          _log(`[Crawler] Electron JS exec error: ${err.message}`);
+          resolve([]);
+        }
+      });
+
+      win.webContents.on('did-fail-load', () => {
+        clearTimeout(timeout);
+        if (win && !win.isDestroyed()) win.close();
+        resolve([]);
+      });
+
+      win.loadURL(placeUrl);
+    } catch (err) {
+      clearTimeout(timeout);
+      if (win && !win.isDestroyed()) win.close();
+      _log(`[Crawler] Electron window error: ${err.message}`);
+      resolve([]);
+    }
+  });
 }
 
 // No browser to close, but keep the export for compatibility
