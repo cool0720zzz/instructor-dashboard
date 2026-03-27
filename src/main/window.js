@@ -139,13 +139,14 @@ function openSeoWindow({ x, y, width, instructorId, seoResultId }) {
   closeSeoWindow();
 
   seoWindow = new BrowserWindow({
+    parent: mainWindow,
     x: Math.round(x),
     y: Math.round(y),
     width: width || 240,
     height: 420,
     transparent: true,
     frame: false,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     resizable: false,
     skipTaskbar: true,
     hasShadow: true,
