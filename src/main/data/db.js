@@ -80,11 +80,10 @@ async function initDb() {
 
     CREATE TABLE IF NOT EXISTS reviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      review_text TEXT,
+      review_text TEXT UNIQUE,
       review_date TEXT,
       matched_instructor_id INTEGER REFERENCES instructors(id),
-      collected_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(review_text, review_date)
+      collected_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS weekly_checks (
@@ -105,9 +104,14 @@ async function initDb() {
     );
   `);
 
-  // Migration: add UNIQUE index on reviews if not exists
+  // Migration: deduplicate reviews and enforce UNIQUE on review_text only
   try {
-    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_text_date ON reviews(review_text, review_date)`);
+    // Remove old composite index if exists
+    db.run(`DROP INDEX IF EXISTS idx_reviews_text_date`);
+    // Remove duplicate review_text rows (keep the one with lowest id)
+    db.run(`DELETE FROM reviews WHERE id NOT IN (SELECT MIN(id) FROM reviews GROUP BY review_text)`);
+    // Create new unique index on review_text only
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_text ON reviews(review_text)`);
   } catch { /* index may already exist or table structure differs */ }
 
   // Version check: clear stale data on app upgrade or fresh install
@@ -292,7 +296,8 @@ function getAvgSeoScore(instructorId, weekStart, weekEnd) {
 function addReview(data) {
   return _run(`INSERT INTO reviews (review_text, review_date, matched_instructor_id)
                VALUES (?, ?, ?)
-               ON CONFLICT(review_text, review_date) DO UPDATE SET
+               ON CONFLICT(review_text) DO UPDATE SET
+               review_date = COALESCE(excluded.review_date, reviews.review_date),
                matched_instructor_id = COALESCE(excluded.matched_instructor_id, reviews.matched_instructor_id)`,
     [data.review_text, data.review_date || new Date().toISOString(), data.matched_instructor_id || null]);
 }
