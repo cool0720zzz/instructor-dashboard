@@ -4,6 +4,10 @@
  * Value: array of change descriptions (Korean)
  */
 module.exports = {
+  '1.1.1': [
+    '리뷰 중복 저장 방지',
+    '강사별 리뷰 카운트 정확도 개선',
+  ],
   '1.1.0': [
     '재등록 트래커 통합 (엑셀/구글 스프레드시트 연동)',
     '활동/재등록 탭 전환 추가',
