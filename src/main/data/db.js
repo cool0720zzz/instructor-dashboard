@@ -311,40 +311,19 @@ function _toDateOnly(isoStr) {
 function getReviewCount(instructorId, weekStart, weekEnd) {
   const start = _toDateOnly(weekStart);
   const end = _toDateOnly(weekEnd);
-  // Check if instructor has keywords set
-  const instructor = _get('SELECT keywords FROM instructors WHERE id = ?', [instructorId]);
-  const keywords = _safeJsonParse(instructor?.keywords, []);
-  const hasKeywords = keywords.length > 0 && keywords.some(k => k && k.trim());
-
-  if (hasKeywords) {
-    // Keywords set → count only matched reviews
-    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
-      [instructorId, start, end]);
-    return row ? row.cnt : 0;
-  } else {
-    // No keywords → count ALL reviews in the period
-    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE review_date >= ? AND review_date <= ?',
-      [start, end]);
-    return row ? row.cnt : 0;
-  }
+  // Always count only reviews matched to this instructor
+  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
+    [instructorId, start, end]);
+  return row ? row.cnt : 0;
 }
 
 function getReviewCountMonth(instructorId, monthStart, monthEnd) {
   const start = _toDateOnly(monthStart);
   const end = _toDateOnly(monthEnd);
-  const instructor = _get('SELECT keywords FROM instructors WHERE id = ?', [instructorId]);
-  const keywords = _safeJsonParse(instructor?.keywords, []);
-  const hasKeywords = keywords.length > 0 && keywords.some(k => k && k.trim());
-
-  if (hasKeywords) {
-    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
-      [instructorId, start, end]);
-    return row ? row.cnt : 0;
-  } else {
-    const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE review_date >= ? AND review_date <= ?',
-      [start, end]);
-    return row ? row.cnt : 0;
-  }
+  // Always count only reviews matched to this instructor
+  const row = _get('SELECT COUNT(*) AS cnt FROM reviews WHERE matched_instructor_id = ? AND review_date >= ? AND review_date <= ?',
+    [instructorId, start, end]);
+  return row ? row.cnt : 0;
 }
 
 // ─── Weekly checks ──────────────────────────────────────────────────────────
